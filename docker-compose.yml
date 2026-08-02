@@ -15,7 +15,7 @@ services:
       timeout: 3s
       retries: 12
     ports:
-      - "5433:5432"                          # 宿主 5433 转发，避免与本机已占用 5432 冲突
+      - "0.0.0.0:5433:5432"                          # 宿主 5433 转发，避免与本机已占用 5432 冲突
 
   langfuse:
     image: langfuse/langfuse:2

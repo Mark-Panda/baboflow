@@ -38,8 +38,8 @@ type ComponentSync struct {
 	repo ComponentRepo
 	last SyncResult
 	mu   sync.Mutex
-	// skillGen 可选：组件变更时同步生成/更新 SKILL（M6 接入，M1 先留钩子）
-	onComponentChange func(ctx context.Context, m *po.ComponentMeta)
+	// skillGen 可选：组件变更时同步生成/更新 SKILL。
+	onComponentChange func(ctx context.Context, m *po.ComponentMeta) error
 }
 
 func NewComponentSync(repo ComponentRepo) *ComponentSync {
@@ -47,7 +47,7 @@ func NewComponentSync(repo ComponentRepo) *ComponentSync {
 }
 
 // SetOnComponentChange 注册组件变更回调（用于 SKILL 自动生成）。
-func (s *ComponentSync) SetOnComponentChange(fn func(ctx context.Context, m *po.ComponentMeta)) {
+func (s *ComponentSync) SetOnComponentChange(fn func(ctx context.Context, m *po.ComponentMeta) error) {
 	s.onComponentChange = fn
 }
 
@@ -74,6 +74,7 @@ func (s *ComponentSync) Run(ctx context.Context) (SyncResult, error) {
 	}
 
 	res := SyncResult{LastRunAt: time.Now()}
+	var syncErr error
 	keepTypes := make([]string, 0, len(forms))
 	for _, f := range forms.Values() {
 		meta := formToMeta(&f)
@@ -85,13 +86,21 @@ func (s *ComponentSync) Run(ctx context.Context) (SyncResult, error) {
 			meta.Fingerprint = fp
 			if err := s.repo.Upsert(ctx, meta); err == nil {
 				res.Added++
-				s.fireChange(ctx, meta)
+				if err := s.fireChange(ctx, meta); err != nil && syncErr == nil {
+					syncErr = err
+				}
+			} else if syncErr == nil {
+				syncErr = err
 			}
 		case old != fp:
 			meta.Fingerprint = fp
 			if err := s.repo.Upsert(ctx, meta); err == nil {
 				res.Updated++
-				s.fireChange(ctx, meta)
+				if err := s.fireChange(ctx, meta); err != nil && syncErr == nil {
+					syncErr = err
+				}
+			} else if syncErr == nil {
+				syncErr = err
 			}
 		default:
 			res.Skipped++
@@ -100,16 +109,19 @@ func (s *ComponentSync) Run(ctx context.Context) (SyncResult, error) {
 	removed, err := s.repo.MarkMissing(ctx, keepTypes)
 	if err == nil {
 		res.Removed = int(removed)
+	} else if syncErr == nil {
+		syncErr = err
 	}
 	s.last = res
-	return res, nil
+	return res, syncErr
 }
 
-func (s *ComponentSync) fireChange(ctx context.Context, m *po.ComponentMeta) {
+func (s *ComponentSync) fireChange(ctx context.Context, m *po.ComponentMeta) error {
 	if s.onComponentChange != nil {
-		// 异步执行，避免阻塞同步主流程
-		go s.onComponentChange(ctx, m)
+		// 同步执行，确保 Run 返回时对应 SKILL 已完成写入。
+		return s.onComponentChange(ctx, m)
 	}
+	return nil
 }
 
 // formToMeta 把 RuleGo ComponentForm 映射为 component_meta。

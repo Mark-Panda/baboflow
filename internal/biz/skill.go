@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"gorm.io/datatypes"
+	"gorm.io/gorm"
 
 	"baboflow/internal/biz/agentkit"
 	"baboflow/internal/data/po"
@@ -29,8 +30,8 @@ type SkillGenRunner func(ctx context.Context, chainID, chainName string, dsl []b
 
 // SkillUsecase SKILL 管理 + Agent2 反生成 + 组件自动 SKILL。
 type SkillUsecase struct {
-	repo   SkillDataRepo
-	chains *RuleChainUsecase
+	repo      SkillDataRepo
+	chains    *RuleChainUsecase
 	genRunner SkillGenRunner
 }
 
@@ -138,7 +139,7 @@ func (uc *SkillUsecase) Delete(ctx context.Context, id int64) error {
 
 // SyncComponentSkill 组件变更时模板化生成/更新对应 SKILL（source=component）。
 // 供 ComponentSync 的 onComponentChange 回调调用。
-func (uc *SkillUsecase) SyncComponentSkill(ctx context.Context, m *po.ComponentMeta) {
+func (uc *SkillUsecase) SyncComponentSkill(ctx context.Context, m *po.ComponentMeta) error {
 	name := ComponentSkillName(m.Type)
 	content := renderComponentSkill(m)
 	fm := map[string]any{"name": name, "description": m.Description}
@@ -149,9 +150,11 @@ func (uc *SkillUsecase) SyncComponentSkill(ctx context.Context, m *po.ComponentM
 	}
 	if existing, err := uc.repo.GetByName(ctx, name); err == nil {
 		s.ID = existing.ID
-		_ = uc.repo.Update(ctx, s)
+		return uc.repo.Update(ctx, s)
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return fmt.Errorf("查询组件 SKILL %q 失败: %w", name, err)
 	} else {
-		_ = uc.repo.Create(ctx, s)
+		return uc.repo.Create(ctx, s)
 	}
 }
 
@@ -162,14 +165,19 @@ func ComponentSkillName(componentType string) string {
 
 // BackfillComponentSkills 启动时补齐缺失的组件 SKILL（零人工兜底）。
 // 仅在对应 SKILL 不存在时生成，不覆盖用户手工修改。
-func (uc *SkillUsecase) BackfillComponentSkills(ctx context.Context, comps []po.ComponentMeta) {
+func (uc *SkillUsecase) BackfillComponentSkills(ctx context.Context, comps []po.ComponentMeta) error {
 	for i := range comps {
 		name := ComponentSkillName(comps[i].Type)
 		if _, err := uc.repo.GetByName(ctx, name); err == nil {
 			continue // 已存在（含手工改过），跳过
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("查询组件 SKILL %q 失败: %w", name, err)
 		}
-		uc.SyncComponentSkill(ctx, &comps[i])
+		if err := uc.SyncComponentSkill(ctx, &comps[i]); err != nil {
+			return fmt.Errorf("补齐组件 SKILL %q 失败: %w", name, err)
+		}
 	}
+	return nil
 }
 
 // renderComponentSkill 模板化生成组件 SKILL.md（描述 + 配置 schema + 示例）。
