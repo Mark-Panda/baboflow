@@ -3,7 +3,7 @@ import { Handle, Position, NodeProps } from '@xyflow/react';
 import { Tooltip } from 'antd';
 import { BugOutlined } from '@ant-design/icons';
 
-import { RuleNodeData } from '../chainDsl';
+import { relationTypesForNode, RuleNodeData } from '../chainDsl';
 import { catStyle } from '../category';
 import { useCanvasStore } from '@/stores/canvasStore';
 
@@ -23,6 +23,12 @@ function RuleNodeInner({ id, data, selected }: NodeProps) {
   const d = data as RuleNodeData;
   const cat = catStyle(d.category || inferCat(d.ruleType));
   const state = useCanvasStore((s) => s.nodeStates[id]);
+  const relationTypes = relationTypesForNode(
+    d.ruleType,
+    d.configuration,
+    [],
+    d.relationTypes,
+  );
 
   return (
     <div
@@ -40,7 +46,22 @@ function RuleNodeInner({ id, data, selected }: NodeProps) {
         )}
       </div>
       <div className="rn-type">{d.ruleType}</div>
-      <Handle type="source" position={Position.Right} />
+      {relationTypes.map((relationType, index) => {
+        const top = `${((index + 1) / (relationTypes.length + 1)) * 100}%`;
+        return (
+          <div className="rn-output" style={{ top }} key={relationType}>
+            <Tooltip title={relationType}>
+              <span className="rn-output-label">{relationType}</span>
+            </Tooltip>
+            <Handle
+              id={relationType}
+              type="source"
+              position={Position.Right}
+              className={`rn-handle rn-handle-${relationType.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }

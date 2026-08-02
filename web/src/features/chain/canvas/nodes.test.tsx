@@ -40,6 +40,28 @@ describe('RuleNode', () => {
     );
     expect(container.querySelector('.rn-debug')).toBeTruthy();
   });
+
+  it('按 switch cases 动态渲染多个 source handle 与标签', () => {
+    const { container, getByText } = render(
+      <ReactFlowProvider>
+        <RuleNode {...propsFor({
+          ruleType: 'switch', name: '条件', category: 'filter',
+          configuration: {
+            cases: [
+              { case: 'msg.kind === "a"', then: 'Case1' },
+              { case: 'msg.kind === "b"', then: 'Case2' },
+            ],
+          },
+        })} />
+      </ReactFlowProvider>
+    );
+    expect(container.querySelectorAll('.react-flow__handle.source')).toHaveLength(4);
+    expect(getByText('Case1')).toBeTruthy();
+    expect(getByText('Case2')).toBeTruthy();
+    expect(getByText('Default')).toBeTruthy();
+    expect(getByText('Failure')).toBeTruthy();
+    expect(container.querySelector('[data-handleid="Case2"]')).toBeTruthy();
+  });
 });
 
 describe('ContainerNode', () => {

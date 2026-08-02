@@ -4,6 +4,7 @@ export interface RuleChain {
   id: string;
   name: string;
   description: string;
+  inputSchema?: Record<string, unknown>;
   status: 'draft' | 'published' | 'archived';
   version: number;
   source: string;
@@ -27,6 +28,7 @@ export interface ChainListItem {
 export interface ChainInput {
   name: string;
   description?: string;
+  inputSchema?: Record<string, unknown>;
   dsl?: unknown;
   debugMode?: boolean;
   source?: string;
@@ -45,6 +47,9 @@ export interface NodeTrace {
   flowType: string;
   relationType: string;
   data: string;
+  in?: string;
+  out?: string;
+  durationMs?: number;
   err?: string;
 }
 

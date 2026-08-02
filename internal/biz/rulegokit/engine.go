@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/rulego/rulego"
 	"github.com/rulego/rulego/api/types"
@@ -122,11 +123,16 @@ func (m *Manager) Get(chainID string) (types.RuleEngine, bool) {
 }
 
 // NodeTrace 逐节点调试事件。
+// 一次节点执行 = 一条记录：In 为流入消息、Out 为流出消息、DurationMs 为耗时。
+// 同一节点被多次触发（循环/并行）时按触发顺序产生多条。
 type NodeTrace struct {
 	NodeID       string `json:"nodeId"`
 	FlowType     string `json:"flowType"`
 	RelationType string `json:"relationType"`
-	Data         string `json:"data"`
+	Data         string `json:"data"` // 兼容旧字段：等同 Out（无 Out 时为 In）
+	In           string `json:"in,omitempty"`
+	Out          string `json:"out,omitempty"`
+	DurationMs   int64  `json:"durationMs,omitempty"`
 	Err          string `json:"err,omitempty"`
 }
 
@@ -159,6 +165,11 @@ func RunDSL(chainID string, dsl []byte, dataType, data string, metadata map[stri
 func runOnEngine(eng types.RuleEngine, chainID, dataType, data string, metadata map[string]string) *RunResult {
 	res := &RunResult{Traces: []NodeTrace{}}
 	var mu sync.Mutex
+	// 每个节点一条记录的索引（nodeID -> traces 下标），用于 IN/OUT 配对；
+	// 节点再次被触发（循环/并行）时改指向下一条新记录。
+	open := map[string]int{}
+	// 节点 IN 时间戳（nodeID -> 起始时间），配对 OUT 时计算耗时。
+	starts := map[string]time.Time{}
 
 	dt := types.JSON
 	if dataType != "" {
@@ -175,11 +186,41 @@ func runOnEngine(eng types.RuleEngine, chainID, dataType, data string, metadata 
 		types.WithOnNodeDebug(func(rcID, flowType, nodeID string, m types.RuleMsg, relationType string, err error) {
 			mu.Lock()
 			defer mu.Unlock()
-			tr := NodeTrace{NodeID: nodeID, FlowType: flowType, RelationType: relationType, Data: m.GetData()}
+			data := m.GetData()
+			if flowType == types.In {
+				// 新的一次节点执行：追加一条记录，记录输入与起始时间。
+				open[nodeID] = len(res.Traces)
+				starts[nodeID] = time.Now()
+				res.Traces = append(res.Traces, NodeTrace{
+					NodeID:   nodeID,
+					FlowType: flowType,
+					In:       data,
+					Data:     data,
+				})
+				return
+			}
+			// OUT：配对到该节点最近一次 IN 记录，补输出/耗时/关系/错误。
+			idx, ok := open[nodeID]
+			if !ok {
+				// 没有配对的 IN（异常情况）：单独成一条。
+				tr := NodeTrace{NodeID: nodeID, FlowType: flowType, RelationType: relationType, Out: data, Data: data}
+				if err != nil {
+					tr.Err = err.Error()
+				}
+				res.Traces = append(res.Traces, tr)
+				return
+			}
+			tr := &res.Traces[idx]
+			tr.FlowType = flowType
+			tr.RelationType = relationType
+			tr.Out = data
+			tr.Data = data
+			if st, has := starts[nodeID]; has {
+				tr.DurationMs = time.Since(st).Milliseconds()
+			}
 			if err != nil {
 				tr.Err = err.Error()
 			}
-			res.Traces = append(res.Traces, tr)
 		}),
 		types.WithOnEnd(func(ctx types.RuleContext, m types.RuleMsg, err error, relationType string) {
 			mu.Lock()

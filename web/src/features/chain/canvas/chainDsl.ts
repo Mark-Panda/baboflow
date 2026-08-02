@@ -1,6 +1,7 @@
 // 规则链画布：RuleGo DSL <-> ReactFlow 互转、dagre 自动布局。
 import dagre from 'dagre';
 import type { Edge, Node } from '@xyflow/react';
+import type { ComponentMeta } from '@/api/component';
 
 // ---- RuleGo DSL 类型 ----
 export interface DslNode {
@@ -33,8 +34,46 @@ export interface RuleNodeData extends Record<string, unknown> {
   category: string;
   configuration: Record<string, unknown>;
   debugMode?: boolean;
+  relationTypes?: string[];
   // 容器节点的子画布（内存态，保存时序列化进 DSL）
   subFlow?: { nodes: Node[]; edges: Edge[] };
+}
+
+export const DEFAULT_RELATION_TYPES = ['Success', 'Failure'];
+
+function uniqueRelations(relations: unknown[]): string[] {
+  return [...new Set(
+    relations.filter((value): value is string =>
+      typeof value === 'string' && value.trim().length > 0
+    ).map((value) => value.trim()),
+  )];
+}
+
+export function relationTypesForNode(
+  ruleType: string,
+  configuration: Record<string, unknown> = {},
+  components: ComponentMeta[] = [],
+  existingRelations: string[] = [],
+): string[] {
+  if (ruleType === 'switch') {
+    const cases = Array.isArray(configuration.cases) ? configuration.cases : [];
+    const caseRelations = cases.map((item) =>
+      item && typeof item === 'object' && 'then' in item
+        ? (item as { then?: unknown }).then
+        : undefined
+    );
+    return uniqueRelations([...caseRelations, 'Default', 'Failure', ...existingRelations]);
+  }
+  const relationTypes = components.find((c) => c.type === ruleType)?.configSchema?.relationTypes;
+  if (Array.isArray(relationTypes) && relationTypes.length > 0) {
+    return uniqueRelations([...relationTypes, ...existingRelations]);
+  }
+  return uniqueRelations([...DEFAULT_RELATION_TYPES, ...existingRelations]);
+}
+
+export function relationClassName(relationType: string): string {
+  const safe = relationType.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  return `edge-${safe || 'success'}`;
 }
 
 export const CONTAINER_TYPES = new Set(['for', 'flow']);
@@ -49,7 +88,10 @@ export function categoryOf(ruleType: string): string {
 }
 
 // ---- DSL -> ReactFlow ----
-export function dslToFlow(dsl: DslChain): { nodes: Node[]; edges: Edge[] } {
+export function dslToFlow(
+  dsl: DslChain,
+  components: ComponentMeta[] = [],
+): { nodes: Node[]; edges: Edge[] } {
   const meta = dsl?.metadata ?? {};
   const nodes: Node[] = (meta.nodes ?? []).map((n, i) => {
     const isContainer = isContainerType(n.type);
@@ -63,19 +105,47 @@ export function dslToFlow(dsl: DslChain): { nodes: Node[]; edges: Edge[] } {
         category: categoryOf(n.type),
         configuration: n.configuration ?? {},
         debugMode: !!n.debugMode,
-        subFlow: isContainer && n.subChain ? dslToFlow(n.subChain) : undefined,
+        relationTypes: relationTypesForNode(n.type, n.configuration ?? {}, components),
+        subFlow: isContainer && n.subChain ? dslToFlow(n.subChain, components) : undefined,
       } satisfies RuleNodeData,
     };
   });
-  const edges: Edge[] = (meta.connections ?? []).map((c) => ({
-    id: `${c.fromId}->${c.toId}:${c.type}`,
-    source: c.fromId,
-    target: c.toId,
-    label: c.type,
-    data: { relationType: c.type },
-    className: `edge-${String(c.type).toLowerCase()}`,
-  }));
-  return { nodes, edges };
+  const edges: Edge[] = (meta.connections ?? []).map((c) => {
+    const relationType = c.type || 'Success';
+    return {
+      id: `${c.fromId}->${c.toId}:${relationType}`,
+      source: c.fromId,
+      target: c.toId,
+      sourceHandle: relationType,
+      label: relationType,
+      data: { relationType },
+      className: relationClassName(relationType),
+    };
+  });
+  const relationTypesByNode = new Map<string, Set<string>>();
+  edges.forEach((edge) => {
+    const relationType = edge.data?.relationType;
+    if (typeof relationType !== 'string') return;
+    const types = relationTypesByNode.get(edge.source) ?? new Set<string>();
+    types.add(relationType);
+    relationTypesByNode.set(edge.source, types);
+  });
+  const nodesWithRelations = nodes.map((node) => {
+    const d = node.data as RuleNodeData;
+    const fromDsl = relationTypesByNode.get(node.id);
+    if (!fromDsl) return node;
+    return {
+      ...node,
+      data: {
+        ...d,
+        relationTypes: relationTypesForNode(d.ruleType, d.configuration, components, [
+          ...(d.relationTypes ?? []),
+          ...fromDsl,
+        ]),
+      } satisfies RuleNodeData,
+    };
+  });
+  return { nodes: nodesWithRelations, edges };
 }
 
 // ---- ReactFlow -> DSL ----
@@ -127,21 +197,26 @@ const CONTAINER_H = 96;
 
 export function layoutFlow(nodes: Node[], edges: Edge[]): Node[] {
   if (nodes.length === 0) return nodes;
-  const g = new dagre.graphlib.Graph();
+  const g = new dagre.graphlib.Graph({ multigraph: true });
   g.setGraph({ rankdir: 'LR', nodesep: 60, ranksep: 120, marginx: 40, marginy: 40 });
   g.setDefaultEdgeLabel(() => ({}));
   nodes.forEach((n) => {
     const isC = n.type === 'container';
-    g.setNode(n.id, { width: isC ? CONTAINER_W : NODE_W, height: isC ? CONTAINER_H : NODE_H });
+    const d = n.data as RuleNodeData;
+    const relationCount = d.relationTypes?.length ?? DEFAULT_RELATION_TYPES.length;
+    const height = Math.max(isC ? CONTAINER_H : NODE_H, relationCount * 24 + 32);
+    g.setNode(n.id, { width: isC ? CONTAINER_W : NODE_W, height });
   });
-  edges.forEach((e) => g.setEdge(e.source, e.target));
+  edges.forEach((e) => g.setEdge(e.source, e.target, {}, e.id));
   dagre.layout(g);
   return nodes.map((n) => {
     const pos = g.node(n.id);
     if (!pos) return n;
     const isC = n.type === 'container';
     const w = isC ? CONTAINER_W : NODE_W;
-    const h = isC ? CONTAINER_H : NODE_H;
+    const d = n.data as RuleNodeData;
+    const relationCount = d.relationTypes?.length ?? DEFAULT_RELATION_TYPES.length;
+    const h = Math.max(isC ? CONTAINER_H : NODE_H, relationCount * 24 + 32);
     return { ...n, position: { x: pos.x - w / 2, y: pos.y - h / 2 } };
   });
 }

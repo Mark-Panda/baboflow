@@ -24,9 +24,9 @@ type SkillDataRepo interface {
 	Delete(ctx context.Context, id int64) error
 }
 
-// SkillGenRunner 执行 Agent2 反生成：输入已发布链，返回 Agent 产出的文本。
+// SkillGenRunner 执行 Agent2 反生成：输入已发布链（含描述/入参 schema），返回 Agent 产出的文本。
 // 由 service 层用 Agent 对话能力实现（避免 biz 循环依赖）。
-type SkillGenRunner func(ctx context.Context, chainID, chainName string, dsl []byte) (string, error)
+type SkillGenRunner func(ctx context.Context, chainID, chainName, chainDesc string, inputSchema, dsl []byte) (string, error)
 
 // SkillUsecase SKILL 管理 + Agent2 反生成 + 组件自动 SKILL。
 type SkillUsecase struct {
@@ -222,13 +222,17 @@ func (uc *SkillUsecase) GenerateFromChain(ctx context.Context, chainID string) (
 	if c.Status != "published" {
 		return nil, errors.New("仅已发布规则链可生成 SKILL")
 	}
-	text, err := uc.genRunner(ctx, chainID, c.Name, c.DSL)
+	text, err := uc.genRunner(ctx, chainID, c.Name, c.Description, c.InputSchema, c.DSL)
 	if err != nil {
 		return nil, err
 	}
 	md := extractSkillMarkdown(text)
 	if md == "" {
 		return nil, fmt.Errorf("Agent 未产出合法 SKILL.md；原始输出: %s", truncateRunes(text, 200))
+	}
+	// 生成物契约：链缺少实质入参 schema 时给出引导（不阻断，但提示调用方补全）。
+	if !hasSubstance(json.RawMessage(c.InputSchema)) {
+		md += "\n\n> ⚠️ 本规则链未声明入参格式。请在规则链“链设置”中填写入参 JSON Schema，以便调用方准确传参。\n"
 	}
 	view, err := uc.Upload(ctx, md, "chain")
 	if err != nil {

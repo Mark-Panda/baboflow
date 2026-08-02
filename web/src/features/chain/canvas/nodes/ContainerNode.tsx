@@ -3,7 +3,7 @@ import { Handle, Position, NodeProps } from '@xyflow/react';
 import { Tooltip } from 'antd';
 import { BugOutlined, LoginOutlined } from '@ant-design/icons';
 
-import { RuleNodeData } from '../chainDsl';
+import { relationTypesForNode, RuleNodeData } from '../chainDsl';
 import { catStyle } from '../category';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { inferCat } from './RuleNode';
@@ -14,6 +14,12 @@ function ContainerNodeInner({ id, data, selected }: NodeProps) {
   const cat = catStyle(d.category || inferCat(d.ruleType));
   const state = useCanvasStore((s) => s.nodeStates[id]);
   const onEnterSub = (d as { __onEnterSub?: (id: string) => void }).__onEnterSub;
+  const relationTypes = relationTypesForNode(
+    d.ruleType,
+    d.configuration,
+    [],
+    d.relationTypes,
+  );
 
   const subCount = d.subFlow?.nodes?.length ?? 0;
   const kindLabel = d.ruleType === 'for' ? '遍历循环' : '子链';
@@ -40,7 +46,22 @@ function ContainerNodeInner({ id, data, selected }: NodeProps) {
       <span className="rn-enter" onClick={(e) => { e.stopPropagation(); onEnterSub?.(id); }}>
         <LoginOutlined /> 进入子画布 ▸
       </span>
-      <Handle type="source" position={Position.Right} />
+      {relationTypes.map((relationType, index) => {
+        const top = `${((index + 1) / (relationTypes.length + 1)) * 100}%`;
+        return (
+          <div className="rn-output" style={{ top }} key={relationType}>
+            <Tooltip title={relationType}>
+              <span className="rn-output-label">{relationType}</span>
+            </Tooltip>
+            <Handle
+              id={relationType}
+              type="source"
+              position={Position.Right}
+              className={`rn-handle rn-handle-${relationType.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }

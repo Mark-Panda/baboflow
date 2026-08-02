@@ -10,15 +10,27 @@ import RuleNode from './nodes/RuleNode';
 import ContainerNode from './nodes/ContainerNode';
 import { ComponentMeta } from '@/api/component';
 import { DND_MIME } from './ComponentPalette';
-import { genNodeId, isContainerType, RuleNodeData } from './chainDsl';
+import {
+  genNodeId,
+  isContainerType,
+  relationClassName,
+  relationTypesForNode,
+  RuleNodeData,
+} from './chainDsl';
 import { componentZhName } from './componentZh';
 import { useCanvasStore } from '@/stores/canvasStore';
 
 const nodeTypes = { rule: RuleNode, container: ContainerNode };
 
+function edgeRelationType(edge: Edge): string {
+  const relationType = (edge.data as { relationType?: unknown } | undefined)?.relationType;
+  return typeof relationType === 'string' ? relationType : 'Success';
+}
+
 export interface FlowCanvasProps {
   nodes: Node[];
   edges: Edge[];
+  components: ComponentMeta[];
   onNodesChange: (nodes: Node[]) => void;
   onEdgesChange: (edges: Edge[]) => void;
   onSelectNode: (node: Node | null) => void;
@@ -49,20 +61,83 @@ export default function FlowCanvas(props: FlowCanvasProps) {
         message.warning('不允许自环连线');
         return;
       }
-      if (edges.some((e) => e.source === conn.source && e.target === conn.target)) {
-        message.warning('两节点间已存在连线');
+      const relationType = conn.sourceHandle ?? 'Success';
+      const sourceNode = nodes.find((node) => node.id === conn.source);
+      const sourceData = sourceNode?.data as RuleNodeData | undefined;
+      const relationTypes = sourceData
+        ? relationTypesForNode(
+            sourceData.ruleType,
+            sourceData.configuration,
+            props.components,
+            sourceData.relationTypes,
+          )
+        : [];
+      if (relationTypes?.length && !relationTypes.includes(relationType)) {
+        message.warning('该输出关系不属于当前组件');
+        return;
+      }
+      if (edges.some((e) =>
+        e.source === conn.source
+        && e.target === conn.target
+        && edgeRelationType(e) === relationType
+      )) {
+        message.warning('两节点间该关系已存在连线');
         return;
       }
       props.onEdgesChange(
-        addEdge({ ...conn, label: 'Success', data: { relationType: 'Success' }, className: 'edge-success' }, edges)
+        addEdge({
+          ...conn,
+          label: relationType,
+          data: { relationType },
+          className: relationClassName(relationType),
+        }, edges)
       );
     },
-    [edges, props, message]
+    [edges, message, nodes, props]
   );
 
   const onReconnect = useCallback(
-    (oldEdge: Edge, conn: Connection) => props.onEdgesChange(reconnectEdge(oldEdge, conn, edges)),
-    [edges, props]
+    (oldEdge: Edge, conn: Connection) => {
+      if (conn.source === conn.target) {
+        message.warning('不允许自环连线');
+        return;
+      }
+      const relationType = conn.sourceHandle ?? edgeRelationType(oldEdge);
+      const sourceNode = nodes.find((node) => node.id === conn.source);
+      const sourceData = sourceNode?.data as RuleNodeData | undefined;
+      const relationTypes = sourceData
+        ? relationTypesForNode(
+            sourceData.ruleType,
+            sourceData.configuration,
+            props.components,
+            sourceData.relationTypes,
+          )
+        : [];
+      if (relationTypes?.length && !relationTypes.includes(relationType)) {
+        message.warning('该输出关系不属于当前组件');
+        return;
+      }
+      if (edges.some((e) =>
+        e.id !== oldEdge.id
+        && e.source === conn.source
+        && e.target === conn.target
+        && edgeRelationType(e) === relationType
+      )) {
+        message.warning('两节点间该关系已存在连线');
+        return;
+      }
+      const next = reconnectEdge(oldEdge, { ...conn, sourceHandle: relationType }, edges)
+        .map((e) => e.id === oldEdge.id
+          ? {
+              ...e,
+              label: relationType,
+              data: { ...e.data, relationType },
+              className: relationClassName(relationType),
+            }
+          : e);
+      props.onEdgesChange(next);
+    },
+    [edges, message, nodes, props]
   );
 
   const onDrop = useCallback(
@@ -83,6 +158,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
           category: comp.category,
           configuration: { ...(comp.example ?? {}) },
           debugMode: false,
+          relationTypes: relationTypesForNode(comp.type, comp.example ?? {}, props.components),
           subFlow: isContainer ? { nodes: [], edges: [] } : undefined,
         } satisfies RuleNodeData,
       };

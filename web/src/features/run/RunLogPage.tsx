@@ -9,6 +9,7 @@ import { ReactFlow, Background, Controls, ReactFlowProvider, MarkerType } from '
 
 import { runApi, ChainRun } from '@/api/run';
 import { chainApi, ChainListItem } from '@/api/chain';
+import { componentApi } from '@/api/component';
 import StatusTag from '@/components/StatusTag';
 import { dslToFlow, layoutFlow, DslChain } from '../chain/canvas/chainDsl';
 import RuleNode from '../chain/canvas/nodes/RuleNode';
@@ -120,8 +121,11 @@ function RunDetailDrawer({ run, chainName, onClose }: { run: ChainRun | null; ch
 
   useEffect(() => {
     if (!run) return;
-    chainApi.get(run.chainId).then((c) => {
-      const { nodes, edges } = dslToFlow((c.dsl as DslChain) ?? {});
+    Promise.all([
+      chainApi.get(run.chainId),
+      componentApi.list().catch(() => ({ list: [] })),
+    ]).then(([c, componentData]) => {
+      const { nodes, edges } = dslToFlow((c.dsl as DslChain) ?? {}, componentData.list ?? []);
       // 按 trace 结果着色
       const stateMap = new Map<string, string>();
       (run.nodeTrace ?? []).forEach((t) => stateMap.set(t.nodeId, t.err ? 'failure' : 'success'));

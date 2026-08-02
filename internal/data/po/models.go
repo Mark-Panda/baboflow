@@ -196,6 +196,8 @@ type RuleChain struct {
 	TenantID    int64          `gorm:"index;not null;default:0" json:"tenantId"`
 	Name        string         `gorm:"size:128;not null" json:"name"`
 	Description string         `gorm:"size:512;not null;default:''" json:"description"`
+	// InputSchema 规则链入参 JSON Schema（可选），供 MCP 暴露/SKILL 生成向调用方说明如何传参。
+	InputSchema datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'" json:"inputSchema"`
 	DSL         datatypes.JSON `gorm:"type:jsonb;not null" json:"dsl"`
 	Status      string         `gorm:"size:16;index;not null;default:draft" json:"status"` // draft/published/archived
 	Version     int            `gorm:"not null;default:0" json:"version"`

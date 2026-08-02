@@ -49,20 +49,21 @@ func NewRuleChainUsecase(repo RuleChainRepo, eng *rulegokit.Manager) *RuleChainU
 // ---- 视图 ----
 
 type ChainView struct {
-	ID          string    `json:"id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	Status      string    `json:"status"`
-	Version     int       `json:"version"`
-	Source      string    `json:"source"`
-	DebugMode   bool      `json:"debugMode"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	ID          string          `json:"id"`
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	InputSchema json.RawMessage `json:"inputSchema"`
+	Status      string          `json:"status"`
+	Version     int             `json:"version"`
+	Source      string          `json:"source"`
+	DebugMode   bool            `json:"debugMode"`
+	UpdatedAt   time.Time       `json:"updatedAt"`
 }
 
 func toChainView(c *po.RuleChain) ChainView {
 	return ChainView{
-		ID: c.ID, Name: c.Name, Description: c.Description, Status: c.Status,
-		Version: c.Version, Source: c.Source, DebugMode: c.DebugMode, UpdatedAt: c.UpdatedAt,
+		ID: c.ID, Name: c.Name, Description: c.Description, InputSchema: json.RawMessage(c.InputSchema),
+		Status: c.Status, Version: c.Version, Source: c.Source, DebugMode: c.DebugMode, UpdatedAt: c.UpdatedAt,
 	}
 }
 
@@ -71,6 +72,7 @@ func toChainView(c *po.RuleChain) ChainView {
 type ChainInput struct {
 	Name        string          `json:"name" binding:"required"`
 	Description string          `json:"description"`
+	InputSchema json.RawMessage `json:"inputSchema"`
 	DSL         json.RawMessage `json:"dsl"`
 	DebugMode   bool            `json:"debugMode"`
 	Source      string          `json:"source"`
@@ -93,7 +95,8 @@ func (uc *RuleChainUsecase) Create(ctx context.Context, in *ChainInput, userID i
 	}
 	c := &po.RuleChain{
 		ID: id, Name: in.Name, Description: in.Description,
-		DSL: datatypes.JSON(dsl), Status: "draft", Version: 0,
+		InputSchema: normalizeSchema(in.InputSchema),
+		DSL:         datatypes.JSON(dsl), Status: "draft", Version: 0,
 		DebugMode: in.DebugMode, Source: src, CreatedBy: &userID,
 	}
 	if err := uc.repo.Create(ctx, c); err != nil {
@@ -109,6 +112,7 @@ func (uc *RuleChainUsecase) Update(ctx context.Context, id string, in *ChainInpu
 	}
 	c.Name = in.Name
 	c.Description = in.Description
+	c.InputSchema = normalizeSchema(in.InputSchema)
 	c.DebugMode = in.DebugMode
 	if len(in.DSL) > 0 {
 		dsl := ensureChainID(in.DSL, id)
@@ -214,6 +218,7 @@ func (uc *RuleChainUsecase) Rollback(ctx context.Context, id string, version int
 type ChainExport struct {
 	Name        string          `json:"name"`
 	Description string          `json:"description"`
+	InputSchema json.RawMessage `json:"inputSchema"`
 	Version     int             `json:"version"`
 	DSL         json.RawMessage `json:"dsl"`
 }
@@ -223,13 +228,24 @@ func (uc *RuleChainUsecase) Export(ctx context.Context, id string) (*ChainExport
 	if err != nil {
 		return nil, err
 	}
-	return &ChainExport{Name: c.Name, Description: c.Description, Version: c.Version, DSL: json.RawMessage(c.DSL)}, nil
+	return &ChainExport{
+		Name: c.Name, Description: c.Description, InputSchema: json.RawMessage(c.InputSchema),
+		Version: c.Version, DSL: json.RawMessage(c.DSL),
+	}, nil
 }
 
 func (uc *RuleChainUsecase) Import(ctx context.Context, in *ChainExport, userID int64) (*po.RuleChain, error) {
 	return uc.Create(ctx, &ChainInput{
-		Name: in.Name, Description: in.Description, DSL: in.DSL, Source: "manual",
+		Name: in.Name, Description: in.Description, InputSchema: in.InputSchema, DSL: in.DSL, Source: "manual",
 	}, userID)
+}
+
+// normalizeSchema 归一化入参 schema：空/非法 JSON 统一回落为 "{}"（保证列非空且可解析）。
+func normalizeSchema(s json.RawMessage) datatypes.JSON {
+	if len(s) == 0 || !json.Valid(s) {
+		return datatypes.JSON([]byte("{}"))
+	}
+	return datatypes.JSON(s)
 }
 
 // ---- 运行 / 调试 ----

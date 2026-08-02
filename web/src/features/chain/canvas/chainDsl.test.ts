@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { dslToFlow, flowToDsl, layoutFlow, isContainerType, type DslChain } from './chainDsl';
+import {
+  dslToFlow,
+  flowToDsl,
+  layoutFlow,
+  isContainerType,
+  relationTypesForNode,
+  type DslChain,
+} from './chainDsl';
 
 const sampleDsl: DslChain = {
   ruleChain: { id: 'chain_1', name: 'demo', root: true },
@@ -25,6 +32,16 @@ describe('isContainerType', () => {
 });
 
 describe('dslToFlow', () => {
+  it('根据 switch cases 动态生成关系端口', () => {
+    expect(relationTypesForNode('switch', {
+      cases: [
+        { case: 'msg.kind == "a"', then: 'Case1' },
+        { case: 'msg.kind == "b"', then: 'Case2' },
+        { case: 'msg.kind == "a"', then: 'Case1' },
+      ],
+    })).toEqual(['Case1', 'Case2', 'Default', 'Failure']);
+  });
+
   it('转换节点与连线', () => {
     const { nodes, edges } = dslToFlow(sampleDsl);
     expect(nodes).toHaveLength(3);
@@ -39,6 +56,27 @@ describe('dslToFlow', () => {
     expect(edges[0].source).toBe('n1');
     expect(edges[0].target).toBe('n2');
     expect(edges[0].data?.relationType).toBe('Success');
+    expect(edges[0].sourceHandle).toBe('Success');
+  });
+
+  it('从组件 schema 恢复多个输出关系', () => {
+    const { nodes } = dslToFlow(sampleDsl, [{
+      type: 'jsFilter',
+      configSchema: { relationTypes: ['True', 'False', 'Failure'] },
+    }] as never);
+    const filter = nodes.find((node) => node.id === 'n2')!;
+    expect(filter.data.relationTypes).toEqual(['True', 'False', 'Failure']);
+  });
+
+  it('旧 DSL 的自定义关系会补回 switch 输出端口', () => {
+    const dsl: DslChain = {
+      metadata: {
+        nodes: [{ id: 's1', type: 'switch', configuration: { cases: [] } }],
+        connections: [{ fromId: 's1', toId: 'n1', type: 'LegacyCase' }],
+      },
+    };
+    const { nodes } = dslToFlow(dsl);
+    expect(nodes[0].data.relationTypes).toEqual(['Default', 'Failure', 'LegacyCase']);
   });
 
   it('无位置时给默认坐标', () => {
@@ -58,6 +96,28 @@ describe('flowToDsl', () => {
     // 坐标写回 additionalInfo
     const n1 = dsl.metadata?.nodes?.find((n) => n.id === 'n1')!;
     expect(n1.additionalInfo?.position).toEqual({ x: 10, y: 20 });
+  });
+
+  it('允许同一目标节点存在多个关系分支', () => {
+    const { nodes } = dslToFlow(sampleDsl);
+    const dsl = flowToDsl({}, nodes, [
+      {
+        id: 'n1->loop:True',
+        source: 'n1',
+        target: 'loop',
+        sourceHandle: 'True',
+        data: { relationType: 'True' },
+      },
+      {
+        id: 'n1->loop:False',
+        source: 'n1',
+        target: 'loop',
+        sourceHandle: 'False',
+        data: { relationType: 'False' },
+      },
+    ]);
+    expect(dsl.metadata?.connections?.map((connection) => connection.type))
+      .toEqual(['True', 'False']);
   });
 });
 

@@ -73,6 +73,55 @@ func TestRunDSL(t *testing.T) {
 	t.Logf("output=%s traces=%d", res.Output, len(res.Traces))
 }
 
+// IN/OUT 配对：同一节点应合并为一条记录，含输入/输出/耗时/关系。
+func TestRunDSL_PairsInOut(t *testing.T) {
+	dsl := `{
+	  "ruleChain": {"id": "chain_pair", "name": "配对", "root": true},
+	  "metadata": {
+	    "nodes": [
+	      {"id": "t1", "type": "jsTransform", "name": "转换", "configuration": {"jsScript": "return {'msg':{'v':(msg.a||0)+1},'metadata':metadata,'msgType':msgType};"}},
+	      {"id": "t2", "type": "jsTransform", "name": "转换2", "configuration": {"jsScript": "return {'msg':{'v':(msg.v||0)*10},'metadata':metadata,'msgType':msgType};"}}
+	    ],
+	    "connections": [{"fromId":"t1","toId":"t2","type":"Success"}]
+	  }
+	}`
+	res, err := RunDSL("chain_pair", []byte(dsl), "JSON", `{"a":1}`, nil)
+	if err != nil {
+		t.Fatalf("RunDSL error: %v", err)
+	}
+	if res.Err != nil {
+		t.Fatalf("run err: %v", res.Err)
+	}
+
+	byID := map[string]NodeTrace{}
+	for _, tr := range res.Traces {
+		byID[tr.NodeID] = tr
+	}
+	t1, ok := byID["t1"]
+	if !ok {
+		t.Fatalf("expected trace for t1, got %+v", res.Traces)
+	}
+	if t1.In == "" || t1.Out == "" {
+		t.Fatalf("t1 should have In and Out, got In=%q Out=%q", t1.In, t1.Out)
+	}
+	if t1.RelationType == "" {
+		t.Fatalf("t1 should carry relation type, got %q", t1.RelationType)
+	}
+	if t1.Data != t1.Out {
+		t.Fatalf("compat Data should equal Out, got Data=%q Out=%q", t1.Data, t1.Out)
+	}
+	// 同一节点只产生一条配对记录（t1 出现次数应为 1）。
+	count := 0
+	for _, tr := range res.Traces {
+		if tr.NodeID == "t1" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 merged trace for t1, got %d", count)
+	}
+}
+
 func TestRun_NotLoaded(t *testing.T) {
 	m := NewManager()
 	if _, err := m.Run("nope", "JSON", `{}`, nil); err == nil {

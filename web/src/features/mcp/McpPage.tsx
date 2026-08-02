@@ -276,6 +276,23 @@ function ExposurePanel() {
     }
   };
 
+  // 选中链后，从链本身拉取描述与入参 schema 作为预填（单一事实源），用户可再改。
+  const onChainChange = async (chainId: string) => {
+    try {
+      const chain = await chainApi.get(chainId);
+      form.setFieldsValue({
+        chainId,
+        description: chain.description || form.getFieldValue('description'),
+        schemaText:
+          chain.inputSchema && Object.keys(chain.inputSchema).length > 0
+            ? JSON.stringify(chain.inputSchema, null, 2)
+            : form.getFieldValue('schemaText'),
+      });
+    } catch {
+      /* 拦截器已提示 */
+    }
+  };
+
   const onExpose = async () => {
     const v = await form.validateFields();
     let schema: Record<string, unknown> | undefined;
@@ -363,6 +380,7 @@ function ExposurePanel() {
               showSearch
               optionFilterProp="label"
               placeholder="选择已发布的规则链"
+              onChange={onChainChange}
               options={chains.map((c) => ({ value: c.id, label: `${c.name} (v${c.version})` }))}
             />
           </Form.Item>

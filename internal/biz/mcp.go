@@ -1,6 +1,7 @@
 package biz
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -174,6 +175,7 @@ func (uc *McpUsecase) ToggleServer(ctx context.Context, id int64) (*po.McpServer
 // ---- 规则链暴露 ----
 
 // ExposeChain 把已发布链注册为 MCP 工具。
+// inputSchema 必填（生成物契约）：MCP 工具面向外部调用方，必须声明如何传参。
 func (uc *McpUsecase) ExposeChain(ctx context.Context, chainID, toolName, description string, inputSchema json.RawMessage) (*po.McpExposure, error) {
 	toolName = strings.TrimSpace(toolName)
 	if toolName == "" {
@@ -182,19 +184,35 @@ func (uc *McpUsecase) ExposeChain(ctx context.Context, chainID, toolName, descri
 	if existing, err := uc.repo.GetExposureByTool(ctx, toolName); err == nil && existing.ID > 0 {
 		return nil, fmt.Errorf("工具名 %q 已被占用", toolName)
 	}
-	schema := inputSchema
-	if len(schema) == 0 {
-		schema = json.RawMessage(`{"type":"object","properties":{"data":{"type":"string","description":"规则链输入数据"}}}`)
+	if !hasSubstance(inputSchema) {
+		return nil, errors.New("入参 schema 必填：请在规则链“链设置”中填写入参格式，或在暴露时提供")
 	}
 	e := &po.McpExposure{
 		ChainID: chainID, ToolName: toolName, Description: description,
-		InputSchema: datatypes.JSON(schema), Enabled: true,
+		InputSchema: datatypes.JSON(inputSchema), Enabled: true,
 	}
 	if err := uc.repo.CreateExposure(ctx, e); err != nil {
 		return nil, err
 	}
 	uc.registerTool(e)
 	return e, nil
+}
+
+// hasSubstance 判断 schema 是否有实质内容（非空、非 {}、非 null、且为合法 JSON）。
+// 先 compact 去掉无意义空白，避免 " { } " 这类被漏判。
+func hasSubstance(s json.RawMessage) bool {
+	t := strings.TrimSpace(string(s))
+	if t == "" || t == "null" {
+		return false
+	}
+	if !json.Valid(s) {
+		return false
+	}
+	var buf bytes.Buffer
+	if err := json.Compact(&buf, s); err != nil {
+		return false
+	}
+	return buf.String() != "{}" && buf.String() != "[]" && buf.String() != "null"
 }
 
 // ListExposures 列出全部已暴露工具。

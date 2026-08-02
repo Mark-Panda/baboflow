@@ -56,6 +56,31 @@
   color: #9aa0b4;
   font-family: monospace;
 }
+.rule-node .rn-output {
+  position: absolute;
+  right: -6px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.rule-node .rn-output-label {
+  max-width: 72px;
+  overflow: hidden;
+  color: #70788e;
+  font-size: 10px;
+  line-height: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rule-node .rn-output .react-flow__handle {
+  position: relative;
+  top: auto;
+  right: auto;
+  transform: none;
+  pointer-events: all;
+}
 .rule-node .rn-debug {
   position: absolute;
   top: -9px;
@@ -162,6 +187,14 @@
   stroke: #3fbf6b;
 }
 .edge-false .react-flow__edge-path {
+  stroke: #ef4444;
+}
+.edge-true .react-flow__edge-path,
+.edge-yes .react-flow__edge-path {
+  stroke: #3fbf6b;
+}
+.edge-false .react-flow__edge-path,
+.edge-no .react-flow__edge-path {
   stroke: #ef4444;
 }
 .react-flow__edge-textbg {

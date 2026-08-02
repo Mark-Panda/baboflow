@@ -172,6 +172,20 @@ export const COMPONENT_ZH: Record<string, ComponentZh> = {
   // ---- flow ----
   flow: { name: "子规则链", desc: "按 targetId 执行一条子规则链（容器）" },
 
+  // ---- agent ----
+  agent: {
+    name: "Agent",
+    desc: "调用一个已配置的 Agent，把结果文本写入消息",
+    fields: {
+      agentKey: { label: "Agent", desc: "从已配置的 Agent 中选择" },
+      prompt: {
+        label: "输入模板",
+        desc: "可选；留空则用上游消息体作为 Agent 输入",
+      },
+      timeoutMs: { label: "超时(毫秒)", desc: "0 表示不限制" },
+    },
+  },
+
   // ---- transform ----
   exprTransform: {
     name: "表达式转换",

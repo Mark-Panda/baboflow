@@ -6,7 +6,9 @@ import {
   Form,
   Input,
   InputNumber,
+  Radio,
   Select,
+  Space,
   Switch,
 } from "antd";
 import { DeleteOutlined } from "@ant-design/icons";
@@ -15,6 +17,10 @@ import type { Node } from "@xyflow/react";
 import { ComponentFormField, ComponentMeta } from "@/api/component";
 import { RuleNodeData } from "./chainDsl";
 import { componentZhName, fieldZh, optionZh } from "./componentZh";
+import { relationFor, useRadio, widgetFor } from "./fieldWidgets";
+import RelationSelect from "./RelationSelect";
+import JsonField from "./JsonField";
+import KeyValueField from "./KeyValueField";
 import CodeField from "@/components/CodeField";
 
 export interface NodeConfigPanelProps {
@@ -107,7 +113,11 @@ export default function NodeConfigPanel({
           )}
 
           {(schema?.fields ?? []).map((f) => (
-            <SchemaField key={f.name} field={f} ruleType={d.ruleType} />
+            d.ruleType === "switch" && f.name === "cases" ? (
+              <SwitchCasesField key={f.name} field={f} />
+            ) : (
+              <SchemaField key={f.name} field={f} ruleType={d.ruleType} />
+            )
           ))}
         </Form>
 
@@ -122,6 +132,70 @@ export default function NodeConfigPanel({
         </Button>
       </div>
     </div>
+  );
+}
+
+function SwitchCasesField({ field: f }: { field: ComponentFormField }) {
+  const labelText = fieldZh("switch", f.name)?.label ?? f.label ?? "分支条件";
+  const descText = fieldZh("switch", f.name)?.desc ?? f.desc;
+  const label = (
+    <span>
+      {labelText}
+      {descText && (
+        <div style={{ color: "#a2a9bd", fontSize: 11, fontWeight: 400, lineHeight: 1.4 }}>
+          {descText}
+        </div>
+      )}
+    </span>
+  );
+
+  return (
+    <Form.List name="cases">
+      {(fields, { add, remove }) => (
+        <Form.Item label={label}>
+          <Space direction="vertical" style={{ width: "100%" }} size="small">
+            {fields.map((field, index) => (
+              <Space key={field.key} align="start" style={{ width: "100%" }}>
+                <Form.Item
+                  {...field}
+                  name={[field.name, "case"]}
+                  rules={[{ required: true, message: "请填写条件表达式" }]}
+                  style={{ flex: 1, marginBottom: 0 }}
+                >
+                  <Input.TextArea
+                    rows={2}
+                    placeholder="如 msg.temperature > 50"
+                    aria-label={`第${index + 1}条条件`}
+                  />
+                </Form.Item>
+                <Form.Item
+                  {...field}
+                  name={[field.name, "then"]}
+                  rules={[{ required: true, message: "请填写关系名称" }]}
+                  style={{ width: 110, marginBottom: 0 }}
+                >
+                  <Input placeholder="关系名" aria-label={`第${index + 1}条关系名`} />
+                </Form.Item>
+                <Button
+                  danger
+                  type="text"
+                  icon={<DeleteOutlined />}
+                  aria-label={`删除第${index + 1}条分支`}
+                  onClick={() => remove(field.name)}
+                />
+              </Space>
+            ))}
+            <Button
+              type="dashed"
+              block
+              onClick={() => add({ case: "", then: `Case${fields.length + 1}` })}
+            >
+              添加分支条件
+            </Button>
+          </Space>
+        </Form.Item>
+      )}
+    </Form.List>
   );
 }
 
@@ -146,14 +220,8 @@ function isCodeField(f: ComponentFormField): {
   return { code: false, language: "text" };
 }
 
-function SchemaField({
-  field: f,
-  ruleType,
-}: {
-  field: ComponentFormField;
-  ruleType: string;
-}) {
-  // 中文化：优先用映射的 label/desc，回退到 RuleGo 自带英文。
+// 字段标签（中文 label + 灰色描述），各分支共用。
+function useFieldLabel(ruleType: string, f: ComponentFormField) {
   const zh = fieldZh(ruleType, f.name);
   const labelText = zh?.label ?? f.label ?? f.name;
   const descText = zh?.desc ?? f.desc;
@@ -174,8 +242,74 @@ function SchemaField({
       )}
     </span>
   );
+  return { label, labelText };
+}
+
+function SchemaField({
+  field: f,
+  ruleType,
+}: {
+  field: ComponentFormField;
+  ruleType: string;
+}) {
+  const { label, labelText } = useFieldLabel(ruleType, f);
   const required = f.required || (f.rules ?? []).some((r) => r.required);
   const reqMsg = `请填写${labelText}`;
+
+  // 1. 关系下拉（引用其它平台资源：子链 / Agent / LLM / MCP / Skill）
+  const relation = relationFor(ruleType, f.name);
+  if (relation) {
+    return (
+      <Form.Item
+        name={f.name}
+        label={label}
+        rules={[{ required, message: `请选择${labelText}` }]}
+      >
+        <RelationSelect relation={relation} placeholder={`请选择${labelText}`} />
+      </Form.Item>
+    );
+  }
+
+  // 2. 单选按钮（少量静态枚举选项）
+  const radioOptions =
+    (f.component?.options as
+      | Array<{ label: string; value: unknown }>
+      | undefined) ?? parseOptions(f);
+  if (useRadio(ruleType, f.name, radioOptions.length)) {
+    return (
+      <Form.Item
+        name={f.name}
+        label={label}
+        rules={[{ required, message: `请选择${labelText}` }]}
+      >
+        <Radio.Group
+          optionType="button"
+          buttonStyle="solid"
+          options={radioOptions.map((o) => ({
+            label: optionZh(f.name, o.value) ?? o.label,
+            value: o.value,
+          }))}
+        />
+      </Form.Item>
+    );
+  }
+
+  // 3. JSON 对象 / 键值对（在代码编辑器之前判断，避免被 name 正则误判）
+  const widget = widgetFor(ruleType, f);
+  if (widget === "json") {
+    return (
+      <Form.Item name={f.name} label={label}>
+        <JsonField placeholder={`请输入${labelText}（JSON）`} />
+      </Form.Item>
+    );
+  }
+  if (widget === "kv") {
+    return (
+      <Form.Item name={f.name} label={label}>
+        <KeyValueField />
+      </Form.Item>
+    );
+  }
 
   // 代码/表达式编辑器（JS 语法高亮）
   const cf = isCodeField(f);
@@ -191,9 +325,7 @@ function SchemaField({
     );
   }
   // 下拉选择
-  const options =
-    (f.component?.options as
-      Array<{ label: string; value: unknown }> | undefined) ?? parseOptions(f);
+  const options = radioOptions;
   if (f.component?.type === "select" || options.length > 0) {
     const localizedOptions = options.map((o) => ({
       ...o,
@@ -238,11 +370,8 @@ function SchemaField({
       </Form.Item>
     );
   }
-  // 多行文本（body/content 等非代码长文本）
-  if (
-    f.component?.type === "textarea" ||
-    /body|content|headers/i.test(f.name)
-  ) {
+  // 多行文本（body/content 等非代码长文本；headers 已被 kv 分支接管）
+  if (f.component?.type === "textarea" || /body|content/i.test(f.name)) {
     return (
       <Form.Item
         name={f.name}
@@ -274,10 +403,11 @@ function parseOptions(
   f: ComponentFormField,
 ): Array<{ label: string; value: string }> {
   const v = f.validate ?? "";
-  const m = v.match(/oneof=([^\s]+)/);
+  const m = v.match(/oneof=(.+)$/);
   if (!m) return [];
   return m[1]
-    .split(" ")
+    .trim()
+    .split(/\s+/)
     .filter(Boolean)
     .map((x) => ({ label: x, value: x }));
 }
