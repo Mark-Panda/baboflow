@@ -1,0 +1,66 @@
+.bf-codefield {
+  overflow: hidden;
+  border: 1px solid #2a3350;
+  border-radius: 8px;
+  background: #0f1420;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+
+.bf-codefield:focus-within {
+  border-color: #4f6ef7;
+  box-shadow: 0 0 0 2px rgba(79, 110, 247, 0.18);
+}
+
+.bf-codefield-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 28px;
+  padding: 0 6px 0 10px;
+  color: #8b98bc;
+  font:
+    10px/1 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  letter-spacing: 0.05em;
+  background: #0c101b;
+  border-bottom: 1px solid #1c2338;
+}
+
+.bf-codefield-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.bf-codefield-toolbar .ant-btn {
+  color: #9fb4e8;
+}
+
+.bf-codefield-editor .cm-editor {
+  width: 100%;
+  font-size: 12px;
+}
+
+.bf-codefield-editor .cm-editor.cm-focused {
+  outline: none;
+}
+
+.bf-codefield-editor .cm-scroller {
+  min-height: 100%;
+}
+
+.bf-codefield-editor .cm-placeholder {
+  color: #55628c;
+}
+
+.bf-codefield-expanded {
+  min-height: 72vh;
+}
+
+.bf-codefield-expanded .bf-codefield-editor {
+  min-height: calc(72vh - 58px);
+}

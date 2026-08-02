@@ -1,7 +1,20 @@
-import { useMemo, useRef } from 'react';
+import { useEffect, useRef, useState } from "react";
+import { basicSetup } from "codemirror";
+import { EditorState } from "@codemirror/state";
+import { indentWithTab } from "@codemirror/commands";
+import { javascript } from "@codemirror/lang-javascript";
+import { json } from "@codemirror/lang-json";
+import { sql } from "@codemirror/lang-sql";
+import { oneDark } from "@codemirror/theme-one-dark";
+import { EditorView, keymap, placeholder } from "@codemirror/view";
+import { Button, Modal, Tooltip, message } from "antd";
+import {
+  CompressOutlined,
+  ExpandOutlined,
+  FormatPainterOutlined,
+} from "@ant-design/icons";
+import "./codeField.css";
 
-// 轻量代码编辑框：透明 textarea 叠加语法高亮层（零依赖），支持 JS/SQL/模板高亮、Tab 缩进、行号。
-// 供节点配置区的脚本/表达式类字段使用；value/onChange 与 antd Form 受控协议一致。
 export interface CodeFieldProps {
   value?: string;
   onChange?: (v: string) => void;
@@ -10,110 +23,209 @@ export interface CodeFieldProps {
   placeholder?: string;
 }
 
-const JS_KEYWORDS =
-  'function|return|if|else|for|while|do|break|continue|switch|case|default|try|catch|finally|throw|new|var|let|const|typeof|instanceof|in|of|null|undefined|true|false|this|class|extends|super|yield|async|await|delete|void';
-const SQL_KEYWORDS =
-  'select|from|where|insert|update|delete|into|values|set|join|left|right|inner|outer|on|group|by|order|having|limit|offset|as|and|or|not|null|like|in|between|distinct|count|sum|avg|max|min|create|table|drop|alter';
-
-function esc(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-// 逐行把代码转成带 <span> 高亮的 HTML。注释/字符串优先于关键字，避免误着色。
-function highlightLine(line: string, lang: string): string {
-  // 注释（// 或 --）整行变灰绿
-  const commentIdx = (() => {
-    const slash = line.indexOf('//');
-    const dash = lang === 'sql' ? line.indexOf('--') : -1;
-    if (slash === -1) return dash;
-    if (dash === -1) return slash;
-    return Math.min(slash, dash);
-  })();
-  let code = line;
-  let comment = '';
-  if (commentIdx >= 0) {
-    code = line.slice(0, commentIdx);
-    comment = line.slice(commentIdx);
+export async function formatCode(
+  source: string,
+  language: string,
+): Promise<string> {
+  const lang = String(language || "").toLowerCase();
+  if (lang !== "javascript" && lang !== "js" && lang !== "json") {
+    return source;
   }
-
-  // 字符串（单/双/反引号）
-  let html = esc(code).replace(
-    /('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`)/g,
-    '<span class="cf-str">$1</span>'
-  );
-  // 数字
-  html = html.replace(/\b(\d+\.?\d*)\b/g, '<span class="cf-num">$1</span>');
-  // 关键字
-  const kw = lang === 'sql' ? SQL_KEYWORDS : JS_KEYWORDS;
-  html = html.replace(new RegExp(`\\b(${kw})\\b`, lang === 'sql' ? 'gi' : 'g'), '<span class="cf-kw">$1</span>');
-
-  if (comment) html += `<span class="cf-cmt">${esc(comment)}</span>`;
-  return html || ' ';
+  const [prettier, babelPlugin, estreePlugin] = await Promise.all([
+    import("prettier/standalone"),
+    import("prettier/plugins/babel"),
+    import("prettier/plugins/estree"),
+  ]);
+  const parser = lang === "json" ? "json" : "babel";
+  return prettier.format(source, {
+    parser,
+    plugins: [babelPlugin, estreePlugin],
+    singleQuote: true,
+    trailingComma: "all",
+  });
 }
 
-export default function CodeField({ value = '', onChange, language = 'javascript', rows = 6, placeholder }: CodeFieldProps) {
-  const lang = String(language || 'javascript').toLowerCase();
-  const taRef = useRef<HTMLTextAreaElement>(null);
-  const preRef = useRef<HTMLPreElement>(null);
-  const gutterRef = useRef<HTMLDivElement>(null);
+function languageExtension(language: string) {
+  const lang = String(language || "").toLowerCase();
+  if (lang === "json") return json();
+  if (lang === "sql") return sql();
+  if (
+    lang === "javascript" ||
+    lang === "js" ||
+    lang === "typescript" ||
+    lang === "ts"
+  ) {
+    return javascript({ typescript: lang === "typescript" || lang === "ts" });
+  }
+  return [];
+}
 
-  const highlighted = useMemo(() => {
-    return value.split('\n').map((l) => highlightLine(l, lang)).join('\n');
-  }, [value, lang]);
+export default function CodeField({
+  value = "",
+  onChange,
+  language = "javascript",
+  rows = 6,
+  placeholder: placeholderText,
+}: CodeFieldProps) {
+  const editorRef = useRef<HTMLDivElement>(null);
+  const viewRef = useRef<EditorView | undefined>(undefined);
+  const editorValueRef = useRef(value);
+  const onChangeRef = useRef(onChange);
+  const formatSeq = useRef(0);
+  const [formatting, setFormatting] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [messageApi, contextHolder] = message.useMessage();
+  const lang = String(language || "javascript").toLowerCase();
+  const canFormat = lang === "javascript" || lang === "js" || lang === "json";
 
-  const lineCount = value.split('\n').length;
-  const lineNos = useMemo(() => Array.from({ length: Math.max(lineCount, rows) }, (_, i) => i + 1), [lineCount, rows]);
+  onChangeRef.current = onChange;
 
-  // 输入层与高亮层/行号滚动同步
-  const syncScroll = () => {
-    const ta = taRef.current;
-    if (preRef.current && ta) {
-      preRef.current.scrollTop = ta.scrollTop;
-      preRef.current.scrollLeft = ta.scrollLeft;
-    }
-    if (gutterRef.current && ta) gutterRef.current.scrollTop = ta.scrollTop;
-  };
+  useEffect(() => {
+    if (!editorRef.current) return undefined;
+    const view = new EditorView({
+      state: EditorState.create({
+        doc: editorValueRef.current,
+        extensions: [
+          basicSetup,
+          keymap.of([indentWithTab]),
+          oneDark,
+          languageExtension(lang),
+          placeholder(placeholderText ?? `请输入${lang}内容`),
+          EditorView.contentAttributes.of({
+            "aria-label": placeholderText ?? `${lang.toUpperCase()} 配置编辑器`,
+          }),
+          EditorView.theme({
+            "&": {
+              minHeight: expanded
+                ? "calc(72vh - 58px)"
+                : `${rows * 1.55 + 1}em`,
+            },
+            ".cm-scroller": {
+              overflow: "auto",
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+            },
+            ".cm-content": {
+              padding: "8px 10px",
+              minHeight: expanded ? "calc(72vh - 70px)" : `${rows * 1.55}em`,
+            },
+            ".cm-gutters": { borderRight: "1px solid #1c2338" },
+          }),
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged) {
+              const next = update.state.doc.toString();
+              editorValueRef.current = next;
+              onChangeRef.current?.(next);
+            }
+          }),
+        ],
+      }),
+      parent: editorRef.current,
+    });
+    viewRef.current = view;
+    return () => {
+      editorValueRef.current = view.state.doc.toString();
+      formatSeq.current += 1;
+      setFormatting(false);
+      view.destroy();
+      viewRef.current = undefined;
+    };
+  }, [expanded, lang, rows, placeholderText]);
 
-  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      const ta = e.currentTarget;
-      const { selectionStart: s, selectionEnd: epos } = ta;
-      const next = value.slice(0, s) + '  ' + value.slice(epos);
-      onChange?.(next);
-      requestAnimationFrame(() => {
-        ta.selectionStart = ta.selectionEnd = s + 2;
+  useEffect(() => {
+    editorValueRef.current = value;
+    const view = viewRef.current;
+    if (!view || value === view.state.doc.toString()) return;
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: value },
+    });
+  }, [value]);
+
+  const format = async () => {
+    if (!viewRef.current || !canFormat || formatting) return;
+    const requestId = ++formatSeq.current;
+    const view = viewRef.current;
+    const source = view.state.doc.toString();
+    setFormatting(true);
+    try {
+      const formatted = await formatCode(source, lang);
+      const isCurrent =
+        requestId === formatSeq.current &&
+        viewRef.current === view &&
+        view.state.doc.toString() === source;
+      if (!isCurrent) {
+        return;
+      }
+      view.dispatch({
+        changes: { from: 0, to: view.state.doc.length, insert: formatted },
       });
+    } catch (err) {
+      if (
+        requestId === formatSeq.current &&
+        viewRef.current === view &&
+        view.state.doc.toString() === source
+      ) {
+        messageApi.error(
+          `格式化失败：${err instanceof Error ? err.message : "代码格式不正确"}`,
+        );
+      }
+    } finally {
+      if (requestId === formatSeq.current) {
+        setFormatting(false);
+      }
     }
   };
 
-  const height = `${rows * 1.55 + 1}em`;
-
-  return (
-    <div className="bf-codefield" style={{ height }}>
-      <div className="bf-codefield-gutter" ref={gutterRef} aria-hidden>
-        {lineNos.map((n) => (
-          <div key={n}>{n}</div>
-        ))}
-      </div>
-      <div className="bf-codefield-body">
-        <pre ref={preRef} className="bf-codefield-highlight" aria-hidden>
-          <code dangerouslySetInnerHTML={{ __html: highlighted + '\n' }} />
-        </pre>
-        <textarea
-          ref={taRef}
-          className="bf-codefield-input"
-          value={value}
-          spellCheck={false}
-          autoCapitalize="off"
-          autoCorrect="off"
-          placeholder={placeholder ?? (lang ? `// ${lang}` : '')}
-          onChange={(e) => onChange?.(e.target.value)}
-          onScroll={syncScroll}
-          onKeyDown={onKeyDown}
-          wrap="off"
-        />
+  const toolbar = (
+    <div className="bf-codefield-toolbar">
+      <span>{lang.toUpperCase()} 编辑器</span>
+      <div className="bf-codefield-actions">
+        {canFormat && (
+          <Tooltip title="格式化代码">
+            <Button
+              type="text"
+              size="small"
+              icon={<FormatPainterOutlined />}
+              loading={formatting}
+              aria-label="格式化代码"
+              onClick={format}
+            />
+          </Tooltip>
+        )}
+        <Tooltip title={expanded ? "收起编辑器" : "展开编辑器"}>
+          <Button
+            type="text"
+            size="small"
+            icon={expanded ? <CompressOutlined /> : <ExpandOutlined />}
+            aria-label={expanded ? "收起编辑器" : "展开编辑器"}
+            onClick={() => setExpanded((open) => !open)}
+          />
+        </Tooltip>
       </div>
     </div>
+  );
+  const editorHost = <div className="bf-codefield-editor" ref={editorRef} />;
+
+  return (
+    <>
+      {contextHolder}
+      <div className="bf-codefield">
+        {!expanded && toolbar}
+        {!expanded && editorHost}
+      </div>
+      <Modal
+        title={`${lang.toUpperCase()} 配置编辑器`}
+        open={expanded}
+        onCancel={() => setExpanded(false)}
+        footer={null}
+        width="min(1100px, calc(100vw - 48px))"
+        centered
+        destroyOnClose={false}
+      >
+        <div className="bf-codefield bf-codefield-expanded">
+          {toolbar}
+          {expanded && editorHost}
+        </div>
+      </Modal>
+    </>
   );
 }

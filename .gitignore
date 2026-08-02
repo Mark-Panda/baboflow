@@ -4,6 +4,7 @@ web/node_modules/
 
 # 构建产物
 web/dist/
+*.tsbuildinfo
 baboflow
 *.exe
 
