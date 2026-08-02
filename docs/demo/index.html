@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BaboFlow — 界面原型 Demo v2</title>
+<style>
+  :root{
+    --bg:#f5f6fa; --panel:#fff; --border:#e5e7eb; --text:#1f2329; --muted:#8a94a6;
+    --primary:#4c6ef5; --primary-soft:#eef1fe;
+    --green:#2f9e44; --red:#e03131; --gold:#f08c00; --purple:#7048e8;
+    --blue:#1971c2; --cyan:#1098ad; --magenta:#d6336c; --teal:#0ca678;
+    --shadow:0 1px 3px rgba(16,24,40,.08); --shadow-lg:0 8px 24px rgba(16,24,40,.12);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--bg);color:var(--text);font-size:14px}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+  .muted{color:var(--muted)}
+
+  .app{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+  .topbar{height:52px;background:var(--panel);border-bottom:1px solid var(--border);
+    display:flex;align-items:center;padding:0 16px;gap:16px;flex:none;z-index:20}
+  .brand{font-weight:700;font-size:16px;display:flex;align-items:center;gap:8px}
+  .logo{width:24px;height:24px;border-radius:6px;background:linear-gradient(135deg,#4c6ef5,#7048e8);
+    display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:13px}
+  .crumb{color:var(--muted)} .spacer{flex:1}
+  .pill{background:var(--primary-soft);color:var(--primary);padding:3px 10px;border-radius:20px;font-size:12px}
+  .top-actions{display:flex;align-items:center;gap:14px;color:var(--muted);font-size:13px}
+  .avatar{width:28px;height:28px;border-radius:50%;background:#adb5bd;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:12px}
+
+  .body{display:flex;flex:1;overflow:hidden}
+  .sidebar{width:208px;background:var(--panel);border-right:1px solid var(--border);padding:12px 8px;flex:none;overflow:auto}
+  .menu-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;color:#495057;cursor:pointer;margin-bottom:2px}
+  .menu-item:hover{background:#f1f3f5}
+  .menu-item.active{background:var(--primary-soft);color:var(--primary);font-weight:600}
+  .menu-item .ico{width:18px;text-align:center}
+  .menu-sep{font-size:11px;color:var(--muted);padding:12px 12px 4px;text-transform:uppercase;letter-spacing:.5px}
+
+  .main{flex:1;overflow:auto;padding:20px}
+  .page{display:none} .page.active{display:block}
+  .page-title{font-size:18px;font-weight:700;margin-bottom:4px}
+  .page-desc{color:var(--muted);margin-bottom:18px}
+
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow)}
+  .btn{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer;font-size:13px;color:#343a40}
+  .btn:hover{border-color:var(--primary);color:var(--primary)}
+  .btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}.btn.primary:hover{background:#3b5bdb}
+  .btn.danger{color:var(--red)} .btn.sm{padding:3px 10px;font-size:12px}
+  .tag{display:inline-block;padding:1px 8px;border-radius:6px;font-size:12px;white-space:nowrap}
+  .tag.green{background:#e6fcf5;color:var(--green)} .tag.red{background:#ffe3e3;color:var(--red)}
+  .tag.gray{background:#f1f3f5;color:#868e96} .tag.gold{background:#fff3bf;color:#b58900}
+  .tag.purple{background:#f3f0ff;color:var(--purple)} .tag.blue{background:#e7f5ff;color:var(--blue)}
+  .tag.cyan{background:#e3fafc;color:var(--cyan)} .tag.magenta{background:#fff0f6;color:var(--magenta)} .tag.teal{background:#e6fcf5;color:var(--teal)}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle}
+  .dot.green{background:var(--green)} .dot.gray{background:#adb5bd}
+  .toolbar{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+  .input,.select{padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:#fff;color:var(--text)}
+  table{width:100%;border-collapse:collapse}
+  th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--border);font-size:13px}
+  th{color:var(--muted);font-weight:500;background:#fafbfc}
+  tr:hover td{background:#fafbfc}
+  .link{color:var(--primary);cursor:pointer;margin-right:10px;white-space:nowrap}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:18px}
+  .stat{padding:18px}.stat .num{font-size:28px;font-weight:700}.stat .label{color:var(--muted);font-size:13px}
+  .grid-2{display:grid;grid-template-columns:340px 1fr;gap:16px;align-items:start}
+  .section-title{font-weight:700;margin-bottom:12px;font-size:15px}
+  .divider{height:1px;background:var(--border);margin:14px 0}
+  .two-col{display:grid;grid-template-columns:300px 1fr;gap:16px;align-items:start}
+  .badge{background:#e7f5ff;color:var(--blue);border-radius:10px;font-size:11px;padding:0 7px}
+
+  /* ===== 画布编辑器 N8N 风格 ===== */
+  .editor{display:none;flex-direction:column;height:calc(100vh - 52px);overflow:hidden}
+  .editor.active{display:flex}
+  .editor-top{height:50px;background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;padding:0 14px;flex:none}
+  .editor-body{display:flex;flex:1;overflow:hidden}
+  .palette{width:200px;background:var(--panel);border-right:1px solid var(--border);overflow:auto;padding:10px;flex:none}
+  .palette h4{font-size:11px;color:var(--muted);margin:10px 4px 6px;text-transform:uppercase;letter-spacing:.5px}
+  .palette-item{background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px;cursor:grab;font-size:13px;display:flex;align-items:center;gap:8px}
+  .palette-item:hover{border-color:var(--primary);box-shadow:var(--shadow)}
+  .palette-item .cico{width:8px;height:8px;border-radius:2px;flex:none}
+
+  .canvas{flex:1;position:relative;background:radial-gradient(circle,#cdd3dd 1px,transparent 1px);background-size:20px 20px;background-color:#f6f7fb;overflow:auto}
+  /* N8N 节点卡片：悬浮图标徽章 + 名称 + 类别 + 状态环 */
+  .node{position:absolute;width:170px;background:#fff;border:1.5px solid var(--border);border-radius:14px;
+    box-shadow:0 1px 4px rgba(16,24,40,.08);padding:12px 12px 10px;cursor:pointer;transition:all .15s;text-align:center}
+  .node:hover{box-shadow:0 8px 20px rgba(16,24,40,.14);transform:translateY(-1px)}
+  .node.sel{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
+  .node.debug{border-color:var(--gold);animation:pulse 1s infinite}
+  .node.ok{border-color:var(--green)} .node.fail{border-color:var(--red)}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(240,140,0,.45)}50%{box-shadow:0 0 0 9px rgba(240,140,0,0)}}
+  .node .nico{width:34px;height:34px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center;
+    color:#fff;font-size:15px;background:linear-gradient(135deg,var(--nc,#4c6ef5),var(--nc2,var(--nc,#4c6ef5)));
+    box-shadow:0 2px 6px rgba(16,24,40,.2);margin-bottom:6px}
+  .node .nname{font-weight:600;font-size:13px;line-height:1.25}
+  .node .ntype{font-size:10px;color:var(--muted);margin-top:2px}
+  .node .nrun{position:absolute;top:-9px;right:-9px;width:24px;height:24px;border-radius:50%;background:#fff;
+    border:1.5px solid var(--border);display:none;align-items:center;justify-content:center;font-size:11px;color:var(--primary);cursor:pointer;box-shadow:var(--shadow)}
+  .node:hover .nrun{display:inline-flex}
+  .node .nrun:hover{background:var(--primary);color:#fff;border-color:var(--primary)}
+  .node .nstatus{position:absolute;top:-8px;left:-8px;width:20px;height:20px;border-radius:50%;color:#fff;font-size:11px;display:none;align-items:center;justify-content:center}
+  .node.ok .nstatus{background:var(--green);display:inline-flex;content:'✔'}
+  .node.fail .nstatus{background:var(--red);display:inline-flex}
+  .node.ok .nstatus::after{content:'✔'} .node.fail .nstatus::after{content:'✘'}
+  .port{position:absolute;width:12px;height:12px;border-radius:50%;background:#fff;border:2px solid #adb5bd;top:50%;transform:translateY(-50%);cursor:crosshair;transition:all .12s}
+  .port:hover{transform:translateY(-50%) scale(1.3);border-color:var(--primary)}
+  .port.in{left:-7px}.port.out{right:-7px;border-color:var(--primary);background:var(--primary)}
+  .port.out2{top:80%;border-color:var(--red);background:var(--red)}
+  /* forEach 容器 */
+  .node.container{width:210px;border-style:dashed;border-color:var(--cyan);background:#f4fbfc}
+  .node.container .enter{margin-top:8px;display:inline-block;font-size:11px;color:var(--cyan);border:1px solid var(--cyan);border-radius:6px;padding:2px 9px;background:#fff}
+  .node.container .enter:hover{background:var(--cyan);color:#fff}
+  svg.wires{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+  .edge-label{position:absolute;font-size:11px;padding:0 7px;border-radius:8px;background:#fff;border:1px solid var(--border);box-shadow:var(--shadow);cursor:pointer}
+  .edge-label:hover{border-color:var(--primary)}
+  .config{width:256px;background:var(--panel);border-left:1px solid var(--border);overflow:auto;padding:14px;flex:none}
+  .config h3{font-size:14px;margin-bottom:12px}
+  .form-item{margin-bottom:12px}.form-item label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+  .form-item .input,.form-item select{width:100%}
+  .codebox{font-family:ui-monospace,Menlo,monospace;font-size:12px;background:#0f172a;color:#e2e8f0;border-radius:8px;padding:10px;min-height:88px;white-space:pre-wrap}
+  .debugbar{height:150px;background:var(--panel);border-top:1px solid var(--border);flex:none;display:flex;flex-direction:column}
+  .debugbar .dhead{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--border)}
+  .debuglog{flex:1;overflow:auto;padding:8px 14px;font-family:ui-monospace,Menlo,monospace;font-size:12px}
+  .log-line{padding:2px 0;color:#495057}.log-line .ok{color:var(--green)}.log-line .fail{color:var(--red)}
+  .minimap{position:absolute;right:12px;bottom:12px;width:150px;height:100px;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow)}
+  .crumbs{position:absolute;left:12px;top:12px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:5px 12px;font-size:12px;box-shadow:var(--shadow)}
+
+  /* 聊天 */
+  .chat-wrap{display:grid;grid-template-columns:230px 1fr;height:calc(100vh - 52px - 40px)}
+  .chat-side{border-right:1px solid var(--border);padding:12px;overflow:auto;background:var(--panel)}
+  .sess-item{padding:9px 10px;border-radius:8px;cursor:pointer;color:#495057;margin-bottom:2px;font-size:13px}
+  .sess-item:hover{background:#f1f3f5}.sess-item.active{background:var(--primary-soft);color:var(--primary)}
+  .chat-main{display:flex;flex-direction:column;background:var(--panel)}
+  .chat-msgs{flex:1;overflow:auto;padding:20px;display:flex;flex-direction:column;gap:16px}
+  .msg{display:flex;max-width:840px}.msg.user{align-self:flex-end}
+  .msg .bub{padding:10px 14px;border-radius:12px;background:#f1f3f5;line-height:1.6;width:100%}
+  .msg.user .bub{background:var(--primary);color:#fff;width:auto}
+  .tool-step{margin-top:8px;border:1px solid var(--border);border-radius:8px;background:#fafbfc;font-size:12px;overflow:hidden}
+  .tool-step .thead{padding:5px 10px;display:flex;align-items:center;gap:8px;cursor:pointer}
+  .tool-step .tbody{padding:8px 10px;border-top:1px solid var(--border);font-family:ui-monospace,Menlo,monospace;color:#495057;display:none}
+  .tool-step.open .tbody{display:block}
+  .chat-input{border-top:1px solid var(--border);padding:14px;display:flex;gap:10px}
+  .chat-input textarea{flex:1;border:1px solid var(--border);border-radius:10px;padding:10px;resize:none;font-family:inherit;font-size:14px;height:52px}
+
+  /* 看板 */
+  .board{display:flex;gap:14px;overflow-x:auto;padding-bottom:10px}
+  .col{width:280px;flex:none;background:#f1f3f5;border-radius:10px;padding:10px}
+  .col h5{font-size:13px;margin-bottom:10px;display:flex;justify-content:space-between;color:#495057;padding:0 4px}
+  .task{background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer;box-shadow:var(--shadow)}
+  .task:hover{border-color:var(--primary)}.task .tt{font-weight:600;font-size:13px;margin-bottom:6px}
+  .task .meta{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted)}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px}
+  .skill-card{padding:16px;display:flex;flex-direction:column;gap:8px}
+  .skill-card .sname{font-weight:700;display:flex;align-items:center;gap:8px}
+
+  /* 日志回放 */
+  .split{display:grid;grid-template-columns:280px 1fr;gap:16px;align-items:start}
+  .loglist-item{padding:11px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;cursor:pointer;background:#fff}
+  .loglist-item.active{border-color:var(--primary);background:var(--primary-soft)}
+  .replay-canvas{position:relative;height:220px;background:radial-gradient(circle,#cdd3dd 1px,transparent 1px);background-size:20px 20px;border:1px solid var(--border);border-radius:10px;margin-bottom:14px}
+  .rnode{position:absolute;width:130px;background:#fff;border:1.5px solid;border-radius:10px;padding:8px 10px;font-size:12px}
+  .rnode.ok{border-color:var(--green)} .rnode.fail{border-color:var(--red)} .rnode.skip{border-color:#ced4da;color:#adb5da;background:#f8f9fa}
+  .rnode .rs{margin-top:2px;font-size:11px}
+  .tl-item{border:1px solid var(--border);border-radius:8px;margin-bottom:6px;overflow:hidden;font-size:12px}
+  .tl-item .th{padding:7px 10px;display:flex;gap:8px;align-items:center;cursor:pointer;background:#fafbfc}
+  .tl-item .tb{padding:8px 10px;border-top:1px solid var(--border);font-family:ui-monospace,Menlo,monospace;display:none}
+  .tl-item.open .tb{display:block}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- 顶栏 -->
+  <div class="topbar">
+    <div class="brand"><span class="logo">◤</span> BaboFlow</div>
+    <div class="crumb" id="crumb">总览</div>
+    <div class="spacer"></div>
+    <span class="pill">🤖 默认模型：GPT-4o</span>
+    <div class="top-actions"><span>⚙ Langfuse</span><span class="avatar">AD</span><span>admin ▾</span></div>
+  </div>
+
+  <div class="body">
+    <!-- 侧边导航：规则链=列表，Agent=列表，编辑器/对话不在菜单 -->
+    <div class="sidebar">
+      <div class="menu-item active" data-page="dashboard"><span class="ico">▣</span>总览</div>
+      <div class="menu-sep">编排</div>
+      <div class="menu-item" data-page="chains"><span class="ico">⛓</span>规则链</div>
+      <div class="menu-item" data-page="runs"><span class="ico">▤</span>运行日志</div>
+      <div class="menu-item" data-page="board"><span class="ico">▦</span>看板</div>
+      <div class="menu-sep">AI 能力</div>
+      <div class="menu-item" data-page="agents"><span class="ico">➤</span>Agent</div>
+      <div class="menu-item" data-page="agentlogs"><span class="ico">🧾</span>Agent 日志</div>
+      <div class="menu-item" data-page="skills"><span class="ico">✦</span>SKILL</div>
+      <div class="menu-item" data-page="mcp"><span class="ico">⚡</span>MCP</div>
+      <div class="menu-sep">系统</div>
+      <div class="menu-item" data-page="cron"><span class="ico">⏱</span>定时任务</div>
+      <div class="menu-item" data-page="llm"><span class="ico">⚙</span>LLM 配置</div>
+      <div class="menu-item" data-page="audit"><span class="ico">🛡</span>审计日志</div>
+    </div>
+
+    <div class="main">
+      <!-- 总览 -->
+      <section class="page active" id="page-dashboard">
+        <div class="page-title">总览</div><div class="page-desc">平台运行状况一览</div>
+        <div class="stats">
+          <div class="card stat"><span class="num">12</span><span class="label">规则链</span></div>
+          <div class="card stat"><span class="num" style="color:var(--green)">8</span><span class="label">已发布</span></div>
+          <div class="card stat"><span class="num" style="color:var(--purple)">15</span><span class="label">SKILL</span></div>
+          <div class="card stat"><span class="num">132 <span class="tag red" style="font-size:12px">失败 3</span></span><span class="label">今日运行</span></div>
+        </div>
+        <div class="grid-2">
+          <div class="card" style="padding:18px"><div class="section-title">快捷入口</div>
+            <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px">
+              <button class="btn primary" data-goto="editor">+ 新建规则链</button>
+              <button class="btn" data-goto="chat">💬 与通用助手对话</button>
+              <button class="btn" data-goto="llm">⚙ 配置 LLM</button>
+              <button class="btn" data-goto="skills">✦ 上传 SKILL</button>
+            </div></div>
+          <div class="card" style="padding:6px 0"><div class="section-title" style="padding:14px 16px 0">最近运行</div>
+            <table><tr><th>规则链</th><th>触发</th><th>状态</th><th>时间</th></tr>
+              <tr><td>HTTP接收入库</td><td><span class="tag blue">task</span></td><td><span class="tag green">成功</span></td><td class="muted">10:21</td></tr>
+              <tr><td>订单同步</td><td><span class="tag purple">cron</span></td><td><span class="tag red">失败</span></td><td class="muted">09:50</td></tr>
+              <tr><td>库存告警</td><td><span class="tag cyan">mcp</span></td><td><span class="tag green">成功</span></td><td class="muted">08:40</td></tr>
+            </table></div>
+        </div>
+      </section>
+
+      <!-- 规则链列表（菜单落地页） -->
+      <section class="page" id="page-chains">
+        <div class="page-title">规则链</div><div class="page-desc">创建 / 编辑 / 发布 / 撤销发布 / 删除</div>
+        <div class="toolbar">
+          <button class="btn primary" data-goto="editor">+ 新建规则链</button>
+          <button class="btn" data-goto="chat">💬 与 Agent 生成</button>
+          <button class="btn">⬆ 导入</button>
+          <div class="spacer"></div>
+          <select class="select"><option>状态：全部</option><option>已发布</option><option>草稿</option></select>
+          <select class="select"><option>来源：全部</option><option>manual</option><option>agent</option></select>
+          <input class="input" placeholder="关键字" /><button class="btn">搜索</button>
+        </div>
+        <div class="card"><table>
+          <tr><th>名称</th><th>描述</th><th>来源</th><th>状态</th><th>版本</th><th>更新时间</th><th>操作</th></tr>
+          <tr><td><b>HTTP接收入库</b></td><td class="muted">接收HTTP并写库</td><td><span class="tag magenta">agent</span></td>
+            <td><span class="dot green"></span>已发布 <span class="tag gold" title="有未发布改动">*改动</span></td><td>v3</td><td class="muted">10-21</td>
+            <td><span class="link" data-goto="editor">编辑</span><span class="link">调试</span><span class="link">撤销发布</span><span class="link">更多▾</span></td></tr>
+          <tr><td><b>订单同步</b></td><td class="muted">定时同步订单</td><td><span class="tag gray">manual</span></td>
+            <td><span class="dot gray"></span>草稿</td><td>v0</td><td class="muted">09-50</td>
+            <td><span class="link" data-goto="editor">编辑</span><span class="link">调试</span><span class="link">发布</span><span class="link">更多▾</span></td></tr>
+          <tr><td><b>日志清洗</b></td><td class="muted">清洗归档日志</td><td><span class="tag gray">manual</span></td>
+            <td><span class="dot green"></span>已发布</td><td>v1</td><td class="muted">09-12</td>
+            <td><span class="link" data-goto="editor">编辑</span><span class="link">调试</span><span class="link">撤销发布</span><span class="link">更多▾</span></td></tr>
+        </table></div>
+        <p class="muted" style="margin-top:10px;font-size:12px">更多▾：生成 SKILL / 暴露 MCP / 导出 / 版本回滚 / 复制 / 删除。已发布链编辑后显示「*改动」，再次发布生效。</p>
+      </section>
+
+      <!-- 审计日志 -->
+      <section class="page" id="page-audit">
+        <div class="page-title">审计日志</div><div class="page-desc">敏感操作留痕（仅 admin 可见）</div>
+        <div class="toolbar">
+          <select class="select"><option>操作：全部</option><option>chain.publish</option><option>chain.delete</option><option>llm.update</option><option>mcp.expose</option><option>task.trigger</option></select>
+          <input class="input" placeholder="时间范围" /><button class="btn">查询</button>
+        </div>
+        <div class="card"><table>
+          <tr><th>时间</th><th>操作</th><th>目标</th><th>详情</th><th>IP</th></tr>
+          <tr><td class="muted">10-21 12:00:01</td><td><span class="tag green">chain.publish</span></td><td>HTTP接收入库</td><td class="mono">{version:4}</td><td class="muted">10.0.0.2</td></tr>
+          <tr><td class="muted">10-21 11:40:22</td><td><span class="tag cyan">mcp.expose</span></td><td>ingest_data</td><td class="mono">{chain:HTTP}</td><td class="muted">10.0.0.2</td></tr>
+          <tr><td class="muted">10-20 09:12:03</td><td><span class="tag gold">llm.update</span></td><td>OpenAI官方</td><td class="mono">{model:gpt-4o}</td><td class="muted">10.0.0.3</td></tr>
+          <tr><td class="muted">10-19 18:03:44</td><td><span class="tag red">chain.delete</span></td><td>旧版同步</td><td class="mono">{id:chain_9}</td><td class="muted">10.0.0.2</td></tr>
+        </table></div>
+      </section>
+
+      <!-- 运行日志（规则链，含回放） -->
+      <section class="page" id="page-runs">
+        <div class="page-title">运行日志</div><div class="page-desc">规则链运行/调试记录，支持逐节点回放</div>
+        <div class="toolbar">
+          <select class="select"><option>规则链：全部</option></select>
+          <select class="select"><option>触发：全部</option></select>
+          <select class="select"><option>状态：全部</option></select>
+          <input class="input" placeholder="时间范围" /><button class="btn">查询</button>
+        </div>
+        <div class="split">
+          <div>
+            <div class="loglist-item active"><b>HTTP接收入库</b> <span class="tag red" style="float:right">✘失败</span><div class="muted">task · 10-21 12:00:01 · 120ms</div></div>
+            <div class="loglist-item"><b>订单同步</b> <span class="tag green" style="float:right">✔成功</span><div class="muted">cron · 09-50 · 3s</div></div>
+            <div class="loglist-item"><b>库存告警</b> <span class="tag green" style="float:right">✔成功</span><div class="muted">mcp · 08:40 · 200ms</div></div>
+          </div>
+          <div class="card" style="padding:16px">
+            <div class="section-title">运行 #100 · HTTP接收入库 <span class="tag red">失败</span> <span class="muted">120ms</span></div>
+            <!-- 只读迷你画布回放：节点按结果着色 -->
+            <div class="replay-canvas">
+              <div class="rnode ok" style="left:24px;top:80px"><b>HTTP接入</b><div class="rs" style="color:var(--green)">✔ Success</div></div>
+              <div class="rnode ok" style="left:190px;top:80px"><b>JS脚本过滤</b><div class="rs" style="color:var(--green)">✔ Success</div></div>
+              <div class="rnode fail" style="left:356px;top:80px"><b>日志输出</b><div class="rs" style="color:var(--red)">✘ Failure</div></div>
+              <div class="rnode skip" style="left:200px;top:160px"><b>告警通知</b><div class="rs">⊘ 未执行</div></div>
+            </div>
+            <div class="section-title">节点时间线</div>
+            <div class="tl-item"><div class="th">▸ s1 HTTP接入 <span class="tag green">Success</span></div><div class="tb">in: {"temperature":35}</div></div>
+            <div class="tl-item"><div class="th">▸ s2 JS脚本过滤 <span class="tag green">Success</span></div><div class="tb">out: {"temperature":35}</div></div>
+            <div class="tl-item open"><div class="th">▾ s3 日志输出 <span class="tag red">Failure</span></div><div class="tb">err: connection refused</div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 看板 -->
+      <section class="page" id="page-board">
+        <div class="page-title">数据管道看板</div><div class="page-desc">任务状态流转，分配给已发布规则链执行</div>
+        <div class="toolbar"><button class="btn primary">+ 新建任务</button><button class="btn">+ 新建列</button></div>
+        <div class="board">
+          <div class="col"><h5>待办 <span class="muted">2</span></h5>
+            <div class="task"><div class="tt">订单同步</div><div class="meta"><span class="tag purple">⛓ HTTP接收入库</span><span class="tag gray">pending</span></div></div>
+            <div class="task"><div class="tt">客户资料导入</div><div class="meta"><span class="muted">未分配链</span><span class="tag gray">pending</span></div></div>
+            <button class="btn sm" style="width:100%">+ 任务</button></div>
+          <div class="col"><h5>进行中 <span class="muted">1</span></h5>
+            <div class="task"><div class="tt">库存同步</div><div class="meta"><span class="tag purple">⛓ 库存告警</span><span class="tag gold">⏳ running</span></div></div>
+            <button class="btn sm" style="width:100%">+ 任务</button></div>
+          <div class="col"><h5>已完成 <span class="muted">2</span></h5>
+            <div class="task"><div class="tt">日志清洗</div><div class="meta"><span class="tag purple">⛓ 日志清洗</span><span class="tag green">✔ success</span></div></div>
+            <div class="task"><div class="tt">订单同步(重试)</div>
+              <div class="meta"><span class="tag purple">⛓ HTTP接收入库</span><span class="tag red">✘ failure</span></div>
+              <div style="margin-top:6px;display:flex;gap:6px"><button class="btn sm">↻ 重跑</button><button class="btn sm">从节点续跑</button></div></div>
+            <button class="btn sm" style="width:100%">+ 任务</button></div>
+        </div>
+      </section>
+
+      <!-- Agent 列表 -->
+      <section class="page" id="page-agents">
+        <div class="page-title">Agent</div><div class="page-desc">内置任务型 Agent + 通用助手；点「对话」进入对应 Agent 会话</div>
+        <div class="toolbar"><button class="btn primary">+ 新建 Agent</button></div>
+        <div class="card"><table>
+          <tr><th>标识</th><th>名称</th><th>类型</th><th>模型</th><th>SKILL</th><th>MCP</th><th>subAgent</th><th>操作</th></tr>
+          <tr><td class="mono">agent-general</td><td><b>通用助手</b></td><td><span class="tag blue">内置</span></td><td>GPT-4o</td><td>全部</td><td>全部</td><td><span class="badge">2</span></td>
+            <td><span class="link" data-goto="chat">对话</span><span class="link">配置</span><span class="link" data-goto="agentlogs">日志</span></td></tr>
+          <tr><td class="mono">agent-chain-builder</td><td><b>规则链生成器</b></td><td><span class="tag blue">内置</span></td><td>GPT-4o</td><td>3</td><td>1</td><td>—</td>
+            <td><span class="link" data-goto="chat">对话</span><span class="link">配置</span><span class="link" data-goto="agentlogs">日志</span></td></tr>
+          <tr><td class="mono">agent-skill-generator</td><td><b>SKILL 生成器</b></td><td><span class="tag blue">内置</span></td><td>GPT-4o</td><td>1</td><td>0</td><td>—</td>
+            <td><span class="link" data-goto="chat">对话</span><span class="link">配置</span><span class="link" data-goto="agentlogs">日志</span></td></tr>
+          <tr><td class="mono">my-ops-bot</td><td><b>运维助手</b></td><td><span class="tag gray">自定义</span></td><td>GLM-4</td><td>2</td><td>1</td><td><span class="badge">1</span></td>
+            <td><span class="link" data-goto="chat">对话</span><span class="link">配置</span><span class="link" data-goto="agentlogs">日志</span></td></tr>
+        </table></div>
+      </section>
+
+      <!-- Agent 日志（会话回放，与规则链日志分离） -->
+      <section class="page" id="page-agentlogs">
+        <div class="page-title">Agent 日志</div><div class="page-desc">会话级回放：user / assistant / 工具调用，关联 Langfuse</div>
+        <div class="toolbar">
+          <select class="select"><option>Agent：全部</option><option>通用助手</option><option>规则链生成器</option></select>
+          <input class="input" placeholder="时间范围" /><input class="input" placeholder="关键字" /><button class="btn">查询</button>
+        </div>
+        <div class="split">
+          <div>
+            <div class="loglist-item active"><b>生成HTTP链</b> <span class="muted" style="float:right">12条</span><div class="muted">通用助手 · 10-21 12:00</div></div>
+            <div class="loglist-item"><b>订单告警</b> <span class="muted" style="float:right">8条</span><div class="muted">通用助手 · 10-20 18:22</div></div>
+            <div class="loglist-item"><b>SKILL 反生成</b> <span class="muted" style="float:right">5条</span><div class="muted">SKILL生成器 · 10-19 09:10</div></div>
+          </div>
+          <div class="card" style="padding:16px">
+            <div class="section-title">session#55 · 通用助手 <span class="muted">12条消息 · tokens 1200</span> <span class="link">Langfuse↗</span></div>
+            <div class="chat-msgs" style="padding:0;overflow:visible">
+              <div class="msg user" style="align-self:flex-start"><div class="bub" style="background:var(--primary);color:#fff">帮我做一个HTTP接收入库的规则链</div></div>
+              <div class="msg"><div class="bub">我先看下可用组件…
+                <div class="tool-step open"><div class="thead">▾ search_component("http") <span class="tag green">✔</span></div><div class="tbody">{query:"http"} → endpoint/http…</div></div>
+                <div style="margin-top:6px">已生成规则链草稿。</div></div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SKILL -->
+      <section class="page" id="page-skills">
+        <div class="page-title">SKILL</div><div class="page-desc">上传 / 查看 SKILL；可由已发布规则链反生成</div>
+        <div class="toolbar"><button class="btn primary">+ 上传 SKILL</button><div class="spacer"></div>
+          <select class="select"><option>来源：全部</option><option>上传</option><option>链生成</option><option>内置</option></select>
+          <input class="input" placeholder="关键字" /><button class="btn">搜索</button></div>
+        <div class="cards">
+          <div class="card skill-card"><div class="sname">✦ weather</div><span class="tag gray" style="width:fit">上传</span><div class="muted">查询天气</div><div><span class="link">查看</span><span class="link">删除</span></div></div>
+          <div class="card skill-card"><div class="sname">✦ http-ingest</div><span class="tag magenta" style="width:fit">链生成</span><div class="muted">由「HTTP接收入库」生成</div><div><span class="link">查看</span><span class="link">删除</span></div></div>
+          <div class="card skill-card"><div class="sname">✦ 订单告警</div><span class="tag blue" style="width:fit">内置</span><div class="muted">内置组件说明</div><div><span class="link">查看</span></div></div>
+        </div>
+      </section>
+
+      <!-- MCP -->
+      <section class="page" id="page-mcp">
+        <div class="page-title">MCP</div><div class="page-desc">配置 MCP 服务；把已发布规则链暴露为 MCP 工具</div>
+        <div class="section-title">MCP 服务 <button class="btn sm primary" style="float:right">+ 新增</button></div>
+        <div class="card" style="margin-bottom:20px"><table>
+          <tr><th>名称</th><th>传输</th><th>地址/命令</th><th>状态</th><th>最近检测</th><th>操作</th></tr>
+          <tr><td>本地工具</td><td><span class="tag cyan">stdio</span></td><td class="mono">npx -y @mcp/fs</td><td><span class="tag green">enabled</span></td><td class="muted">10:00</td><td><span class="link">编辑</span><span class="link">启停</span><span class="link">测试</span><span class="link">删除</span></td></tr>
+          <tr><td>远程检索</td><td><span class="tag purple">sse</span></td><td class="mono">https://mcp.example.com/sse</td><td><span class="tag gray">disabled</span></td><td class="muted">—</td><td><span class="link">编辑</span><span class="link">启停</span><span class="link">测试</span><span class="link">删除</span></td></tr>
+        </table></div>
+        <div class="section-title">已暴露的 MCP 工具（来自规则链）</div>
+        <div class="card"><table>
+          <tr><th>工具名</th><th>描述</th><th>来源规则链</th><th>端点</th><th>状态</th><th>操作</th></tr>
+          <tr><td class="mono">ingest_data</td><td class="muted">HTTP 接收入库</td><td>HTTP接收入库</td><td class="mono">/mcp</td><td><span class="tag green">enabled</span></td><td><span class="link">禁用</span><span class="link">取消暴露</span></td></tr>
+        </table></div>
+      </section>
+
+      <!-- 定时任务 -->
+      <section class="page" id="page-cron">
+        <div class="page-title">定时任务</div><div class="page-desc">cron / 间隔 / 一次性触发 Agent 或规则链</div>
+        <div class="toolbar"><button class="btn primary">+ 新建任务</button></div>
+        <div class="card"><table>
+          <tr><th>目标类型</th><th>目标</th><th>调度</th><th>表达式/间隔</th><th>启用</th><th>最近执行</th><th>操作</th></tr>
+          <tr><td><span class="tag purple">chain</span></td><td>订单同步</td><td>cron</td><td class="mono">0 */5 * * * *</td><td><span class="tag green">是</span></td><td class="muted">10:15</td><td><span class="link">编辑</span><span class="link">启停</span><span class="link">删除</span></td></tr>
+          <tr><td><span class="tag magenta">agent</span></td><td>agent-general</td><td>interval</td><td>3600s</td><td><span class="tag gray">否</span></td><td class="muted">—</td><td><span class="link">编辑</span><span class="link">启停</span><span class="link">删除</span></td></tr>
+        </table></div>
+      </section>
+
+      <!-- LLM 配置（两级） -->
+      <section class="page" id="page-llm">
+        <div class="page-title">LLM 配置</div><div class="page-desc">接入点（baseUrl + apiKey）下挂多个模型；支持从接入点拉取模型</div>
+        <div class="two-col">
+          <div>
+            <button class="btn primary" style="width:100%;margin-bottom:12px">+ 新增接入点</button>
+            <div class="provider-item active" style="border-color:var(--primary);background:var(--primary-soft)"><b>OpenAI官方</b> <span class="badge">3 模型</span><div class="muted mono" style="margin-top:4px">api.openai.com</div></div>
+            <div class="provider-item"><b>公司网关</b> <span class="badge">5 模型</span><div class="muted mono" style="margin-top:4px">gw.internal</div></div>
+            <div class="provider-item"><b>GLM</b> <span class="badge">2 模型</span><div class="muted mono" style="margin-top:4px">open.bigmodel.cn</div></div>
+          </div>
+          <div class="card" style="padding:18px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div><b style="font-size:16px">OpenAI官方</b> <span class="muted mono">https://api.openai.com/v1</span><div class="muted" style="margin-top:2px">sk-****abcd</div></div>
+              <div><button class="btn sm">编辑</button> <button class="btn sm">测试连接</button> <button class="btn sm danger">删除</button></div>
+            </div>
+            <div class="divider"></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+              <b>模型</b><div><button class="btn sm primary">+ 登记模型</button> <button class="btn sm">从接入点拉取</button></div>
+            </div>
+            <table>
+              <tr><th>模型</th><th>别名</th><th>能力</th><th>默认</th><th>状态</th><th>操作</th></tr>
+              <tr><td class="mono">gpt-4o</td><td>GPT4o</td><td><span class="tag blue">chat</span></td><td>★</td><td><span class="tag green">启用</span></td><td><span class="link">编辑</span><span class="link">测试</span><span class="link">删除</span></td></tr>
+              <tr><td class="mono">gpt-4o-mini</td><td>—</td><td><span class="tag blue">chat</span></td><td></td><td><span class="tag green">启用</span></td><td><span class="link">编辑</span><span class="link">测试</span><span class="link">删除</span></td></tr>
+              <tr><td class="mono">text-embedding-3-large</td><td>—</td><td><span class="tag purple">embedding</span></td><td></td><td><span class="tag green">启用</span></td><td><span class="link">编辑</span><span class="link">测试</span><span class="link">删除</span></td></tr>
+            </table>
+            <p class="muted" style="margin-top:10px;font-size:12px">「从接入点拉取」调 {baseUrl}/models 列出可用模型勾选登记；不支持的网关可手填。</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Agent 对话（由列表跳入，非侧边菜单） -->
+      <section class="page" id="page-chat" style="margin:-20px">
+        <div class="chat-wrap">
+          <div class="chat-side">
+            <button class="btn sm" data-goto="agents" style="width:100%;margin-bottom:10px">← Agent 列表</button>
+            <button class="btn primary" style="width:100%;margin-bottom:12px">+ 新会话</button>
+            <div class="sess-item active">生成 HTTP 接收入库链</div>
+            <div class="sess-item">订单告警规则</div>
+          </div>
+          <div class="chat-main">
+            <div style="padding:12px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between">
+              <b>通用助手 <span class="muted mono">agent-general</span></b><span class="link">Langfuse ↗</span></div>
+            <div class="chat-msgs">
+              <div class="msg user"><div class="bub">
+                看这张架构图，帮我生成对应的规则链
+                <div style="display:flex;gap:8px;margin-top:8px">
+                  <span class="tag" style="background:rgba(255,255,255,.2);color:#fff">🖼 arch.png</span>
+                  <span class="tag" style="background:rgba(255,255,255,.2);color:#fff">📄 spec.pdf</span>
+                </div></div></div>
+              <div class="msg"><div class="bub">我先看一下当前可用组件…
+                <div class="tool-step open"><div class="thead">▾ search_component("http") <span class="tag green">✔</span></div><div class="tbody">{query:"http",topK:3} → endpoint/http, action/http…</div></div>
+                <div class="tool-step open"><div class="thead">▾ ⬡ 委派 subAgent：<b>agent-chain-builder</b> <span class="tag green">✔</span></div>
+                  <div class="tbody">task: 根据需求生成 RuleGo 规则链 DSL<br>└ 已生成草稿「HTTP接收入库」(4 节点)</div></div>
+                <div style="margin-top:8px">已生成规则链草稿 <b>HTTP接收入库</b>（HTTP接入 → JS过滤 → 写库 → 日志）。需要发布吗？</div>
+                <div style="margin-top:10px;display:flex;gap:8px"><button class="btn sm primary" data-goto="editor">在画布中打开</button><button class="btn sm">直接发布</button></div>
+              </div></div>
+            </div>
+            <div class="chat-input">
+              <button class="btn" title="上传图片/文件" style="align-self:flex-end">📎</button>
+              <textarea placeholder="输入消息…（支持图片/文件，模型支持时）"></textarea>
+              <button class="btn primary" style="align-self:flex-end">发送</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div><!-- /main -->
+  </div><!-- /body -->
+
+  <!-- ===== 画布编辑器（整页覆盖，N8N 风格，含 forEach 容器） ===== -->
+  <section class="editor" id="page-editor" style="position:absolute;inset:52px 0 0 208px;background:var(--bg)">
+    <div class="editor-top">
+      <button class="btn sm" id="backBtn">← 返回</button>
+      <b>HTTP接收入库</b> <span class="tag green">已发布 v3</span> <span class="tag gold">*有改动</span>
+      <button class="btn sm">链变量 ⚙</button>
+      <div class="spacer"></div>
+      <button class="btn sm">保存草稿</button>
+      <button class="btn sm primary">发布</button>
+      <button class="btn sm">▶ 调试</button>
+      <button class="btn sm">⋮</button>
+    </div>
+    <div class="editor-body">
+      <div class="palette">
+        <input class="input" placeholder="🔍 搜索组件" style="width:100%;margin-bottom:6px" />
+        <h4>端点</h4>
+        <div class="palette-item"><span class="cico" style="background:var(--purple)"></span>HTTP 接入</div>
+        <h4>过滤</h4>
+        <div class="palette-item"><span class="cico" style="background:var(--gold)"></span>JS 脚本过滤</div>
+        <div class="palette-item"><span class="cico" style="background:var(--gold)"></span>条件分支</div>
+        <h4>转换</h4>
+        <div class="palette-item"><span class="cico" style="background:var(--blue)"></span>JS 转换</div>
+        <h4>动作</h4>
+        <div class="palette-item"><span class="cico" style="background:var(--green)"></span>日志输出</div>
+        <h4>循环</h4>
+        <div class="palette-item"><span class="cico" style="background:var(--cyan)"></span>forEach ▸</div>
+        <div class="palette-item"><span class="cico" style="background:var(--cyan)"></span>subChain ▸</div>
+        <h4>AI</h4>
+        <div class="palette-item"><span class="cico" style="background:var(--magenta)"></span>调用 Agent</div>
+      </div>
+
+      <div class="canvas">
+        <div class="crumbs">⛓ HTTP接收入库</div>
+        <svg class="wires">
+          <path d="M 190 110 C 225 110, 235 110, 263 110" stroke="#2f9e44" stroke-width="2" fill="none"/>
+          <path d="M 440 110 C 480 110, 490 110, 513 110" stroke="#2f9e44" stroke-width="2" fill="none"/>
+          <path d="M 605 145 C 605 175, 620 180, 620 205" stroke="#2f9e44" stroke-width="2" fill="none"/>
+          <path d="M 355 148 C 355 200, 365 230, 365 232" stroke="#e03131" stroke-width="2" fill="none" stroke-dasharray="5,4"/>
+        </svg>
+        <div class="edge-label" style="left:212px;top:96px;color:var(--green)">Success</div>
+        <div class="edge-label" style="left:462px;top:96px;color:var(--green)">Success</div>
+        <div class="edge-label" style="left:628px;top:168px;color:var(--green)">Success</div>
+        <div class="edge-label" style="left:330px;top:190px;color:var(--red)">Failure</div>
+
+        <!-- 普通节点：悬浮图标徽章 + 名称 + 单节点运行按钮 + 状态环 -->
+        <div class="node ok" style="--nc:var(--purple);left:20px;top:80px">
+          <span class="nstatus"></span><span class="nrun" title="运行此节点">▶</span>
+          <span class="nico">◉</span>
+          <div class="nname">HTTP 接入</div><div class="ntype">endpoint/http</div>
+          <span class="port out"></span></div>
+
+        <div class="node sel debug" style="--nc:var(--gold);left:270px;top:80px">
+          <span class="nrun" title="运行此节点">▶</span>
+          <span class="nico">◈</span>
+          <div class="nname">JS 脚本过滤</div><div class="ntype">filter/js</div>
+          <span class="port in"></span><span class="port out"></span><span class="port out out2"></span></div>
+
+        <div class="node fail" style="--nc:var(--green);left:520px;top:80px">
+          <span class="nstatus"></span><span class="nrun" title="运行此节点">▶</span>
+          <span class="nico">▶</span>
+          <div class="nname">日志输出</div><div class="ntype">action/log</div>
+          <span class="port in"></span><span class="port out"></span></div>
+
+        <div class="node" style="--nc:var(--red);left:280px;top:240px">
+          <span class="nrun" title="运行此节点">▶</span>
+          <span class="nico">⚠</span>
+          <div class="nname">告警通知</div><div class="ntype">action/notify</div>
+          <span class="port in"></span></div>
+
+        <!-- forEach 容器节点（双击进入子画布） -->
+        <div class="node container" style="--nc:var(--cyan);left:520px;top:210px">
+          <span class="nrun" title="运行此节点">▶</span>
+          <span class="nico">▷</span>
+          <div class="nname">forEach 遍历 items</div><div class="ntype">loop/forEach</div>
+          <span class="enter">进入子画布 ▸</span>
+          <span class="port in"></span><span class="port out"></span></div>
+
+        <div class="minimap"></div>
+      </div>
+
+      <div class="config">
+        <h3>节点配置</h3>
+        <div class="form-item"><label>节点名称</label><input class="input" value="JS 脚本过滤" /></div>
+        <div class="form-item"><label>类型</label><input class="input" value="filter/js" disabled /></div>
+        <div class="form-item"><label>脚本（jsScript）· Monaco</label><div class="codebox">return msg.temperature > 50;</div></div>
+        <div class="form-item"><label>调试模式</label><select class="select"><option>开启</option><option>关闭</option></select></div>
+        <button class="btn sm" style="width:100%;margin-bottom:8px">▶ 运行此节点</button>
+        <button class="btn danger sm" style="width:100%">删除节点</button>
+      </div>
+    </div>
+    <div class="debugbar">
+      <div class="dhead"><b>调试控制台</b>
+        <select class="select"><option>输入：手填 JSON</option><option>从最近运行取输入</option><option>从看板任务取 payload</option></select>
+        <input class="input mono" value='{"temperature":35}' style="width:240px" />
+        <button class="btn sm primary">▶ 运行</button>
+        <button class="btn sm">⏸ 断点</button>
+        <div class="spacer"></div><span class="muted">hover 节点出现 ▶ 可单节点调试</span></div>
+      <div class="debuglog">
+        <div class="log-line">▶ run#100 start</div>
+        <div class="log-line">  s1 HTTP接入   <span class="ok">✔ Success</span>  in:{t:35}</div>
+        <div class="log-line">  s2 JS脚本过滤 <span class="ok">✔ Success</span>  out:{t:35} <span class="muted">(已断点暂停)</span></div>
+        <div class="log-line">  s3 日志输出   <span class="fail">✘ Failure</span>  err: connection refused</div>
+        <div class="log-line">■ run#100 <span class="fail">failure</span> 耗时 120ms</div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+  const crumbMap={dashboard:'总览',chains:'规则链',runs:'运行日志',board:'看板 / 数据管道',
+    agents:'Agent',agentlogs:'Agent 日志',skills:'SKILL',mcp:'MCP',cron:'定时任务',llm:'系统设置 / LLM 配置',audit:'系统设置 / 审计日志',
+    chat:'Agent 对话 / 通用助手',editor:'规则链 / 画布编辑器'};
+  const items=document.querySelectorAll('.menu-item');
+  const pages=document.querySelectorAll('.page');
+  const crumb=document.getElementById('crumb');
+  const editor=document.getElementById('page-editor');
+
+  function show(name){
+    pages.forEach(p=>p.classList.remove('active'));
+    // 菜单高亮：editor→chains，chat→agents
+    const menuKey = name==='editor'?'chains': name==='chat'?'agents': name;
+    items.forEach(i=>i.classList.toggle('active', i.dataset.page===menuKey));
+    crumb.textContent=crumbMap[name]||'';
+    if(name==='editor'){ editor.classList.add('active'); }
+    else{
+      editor.classList.remove('active');
+      const el=document.getElementById('page-'+name);
+      if(el) el.classList.add('active');
+    }
+  }
+  items.forEach(i=>i.addEventListener('click',()=>show(i.dataset.page)));
+  document.querySelectorAll('[data-goto]').forEach(b=>b.addEventListener('click',()=>show(b.dataset.goto)));
+  document.getElementById('backBtn').addEventListener('click',()=>show('chains'));
+  document.querySelectorAll('.tool-step .thead').forEach(h=>h.addEventListener('click',()=>h.parentElement.classList.toggle('open')));
+  document.querySelectorAll('.tl-item .th').forEach(h=>h.addEventListener('click',()=>h.parentElement.classList.toggle('open')));
+  // forEach 容器双击提示进入子画布
+  document.querySelectorAll('.node.container').forEach(n=>n.addEventListener('dblclick',()=>{
+    document.querySelector('.crumbs').innerHTML='⛓ HTTP接收入库 <span class="muted">/ forEach</span> <span class="link" onclick="crumbBack()">返回</span>';
+  }));
+  function crumbBack(){ document.querySelector('.crumbs').innerHTML='⛓ HTTP接收入库'; }
+</script>
+</body>
+</html>
