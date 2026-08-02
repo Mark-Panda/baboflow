@@ -1,0 +1,145 @@
+/* ---- 规则链画布 ---- */
+.bf-canvas-wrap { position: relative; width: 100%; height: 100%; }
+
+/* 自定义节点卡片 */
+.rule-node {
+  position: relative;
+  min-width: 200px;
+  background: #fff;
+  border: 1.5px solid #e2e5ee;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(30, 40, 80, 0.06);
+  padding: 10px 12px 10px 16px;
+  font-size: 13px;
+  transition: border-color .15s, box-shadow .15s;
+}
+.rule-node::before {
+  content: '';
+  position: absolute; left: 0; top: 0; bottom: 0;
+  width: 5px; border-radius: 10px 0 0 10px;
+  background: var(--cat-color, #9095a5);
+}
+.rule-node.selected {
+  border-color: #4f6ef7;
+  box-shadow: 0 0 0 3px rgba(79, 110, 247, 0.18);
+}
+.rule-node .rn-head { display: flex; align-items: center; gap: 6px; }
+.rule-node .rn-icon { font-size: 14px; color: var(--cat-color, #9095a5); }
+.rule-node .rn-name { font-weight: 600; color: #1f2430; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rule-node .rn-type { margin-top: 3px; font-size: 11px; color: #9aa0b4; font-family: monospace; }
+.rule-node .rn-debug {
+  position: absolute; top: -9px; right: 8px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #faad14; color: #fff; font-size: 10px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* 容器节点 */
+.rule-node.container {
+  min-width: 260px;
+  border-style: dashed;
+  background: linear-gradient(180deg, #fbfcff, #f4f7ff);
+}
+.rule-node .rn-enter {
+  margin-top: 8px;
+  font-size: 11px; color: #4f6ef7; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 3px;
+}
+
+/* 调试态 */
+.rule-node.st-running { border-color: #4f6ef7; animation: bf-breathe 1.1s ease-in-out infinite; }
+.rule-node.st-success { border-color: #3fbf6b; }
+.rule-node.st-success::after {
+  content: '✔'; position: absolute; top: -9px; left: -6px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #3fbf6b; color: #fff; font-size: 10px;
+  display: flex; align-items: center; justify-content: center;
+}
+.rule-node.st-failure { border-color: #ef4444; box-shadow: 0 0 0 3px rgba(239,68,68,0.15); }
+.rule-node.st-skipped { opacity: .45; }
+
+@keyframes bf-breathe {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(79,110,247,.25); }
+  50% { box-shadow: 0 0 0 6px rgba(79,110,247,.12); }
+}
+
+/* Handle */
+.react-flow__handle {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: #fff; border: 2px solid #8b93ab;
+}
+.react-flow__handle:hover { background: #4f6ef7; border-color: #4f6ef7; }
+.react-flow__handle-connecting { background: #4f6ef7; }
+
+/* 连线 */
+.react-flow__edge-path { stroke: #b6bccf; stroke-width: 2; }
+.react-flow__edge.selected .react-flow__edge-path { stroke: #4f6ef7; }
+.edge-success .react-flow__edge-path { stroke: #3fbf6b; }
+.edge-failure .react-flow__edge-path { stroke: #ef4444; }
+.edge-true .react-flow__edge-path { stroke: #3fbf6b; }
+.edge-false .react-flow__edge-path { stroke: #ef4444; }
+.react-flow__edge-textbg { fill: #fff; }
+.react-flow__edge-text { font-size: 10px; fill: #6b7280; }
+
+/* 面板 */
+.bf-palette { width: 220px; border-right: 1px solid #eef0f5; background: #fafbfd; overflow: auto; }
+.bf-palette-item {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 8px; margin: 3px 8px; border-radius: 7px;
+  background: #fff; border: 1px solid #eceff5;
+  cursor: grab; font-size: 12px; color: #2a2f3d;
+  transition: border-color .12s, box-shadow .12s;
+}
+.bf-palette-item:hover { border-color: #4f6ef7; box-shadow: 0 1px 6px rgba(79,110,247,.18); }
+.bf-palette-item .pi-dot { width: 7px; height: 7px; border-radius: 2px; background: var(--cat-color, #9095a5); flex: none; }
+.bf-palette-item .pi-type { margin-left: auto; font-size: 10px; color: #a2a9bd; font-family: monospace; }
+
+.bf-config { width: 320px; border-left: 1px solid #eef0f5; background: #fff; overflow: auto; }
+.bf-config-empty { padding: 40px 20px; text-align: center; color: #a2a9bd; font-size: 13px; }
+
+/* 编辑器顶栏 */
+.bf-editor-bar {
+  height: 52px; display: flex; align-items: center; gap: 10px;
+  padding: 0 14px; background: #fff; border-bottom: 1px solid #eef0f5;
+}
+.bf-editor-bar .title { font-weight: 600; font-size: 14px; }
+
+/* 调试控制台 */
+.bf-debug-console {
+  border-top: 1px solid #eef0f5; background: #fff;
+}
+
+/* ---- 代码编辑器（CodeField：透明输入 + 高亮叠加）---- */
+.bf-codefield {
+  display: flex; border: 1px solid #2a3350; border-radius: 8px; overflow: hidden;
+  background: #0f1420; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px; line-height: 1.55; transition: border-color .15s;
+}
+.bf-codefield:focus-within { border-color: #4f6ef7; box-shadow: 0 0 0 2px rgba(79,110,247,.18); }
+.bf-codefield-gutter {
+  flex: none; padding: 6px 8px 6px 10px; text-align: right; color: #44507a; user-select: none;
+  background: #0c101b; border-right: 1px solid #1c2338; overflow: hidden; min-width: 2.4em;
+}
+.bf-codefield-body { position: relative; flex: 1; min-width: 0; }
+.bf-codefield-highlight, .bf-codefield-input {
+  margin: 0; padding: 6px 10px; font: inherit; line-height: inherit; white-space: pre; overflow: auto;
+  tab-size: 2;
+}
+.bf-codefield-highlight {
+  position: absolute; inset: 0; color: #d6e2ff; pointer-events: none; background: transparent;
+}
+.bf-codefield-highlight code { font: inherit; background: transparent; display: block; min-height: 100%; }
+.bf-codefield-input {
+  position: relative; width: 100%; height: 100%; resize: none; border: none; outline: none;
+  background: transparent; color: transparent; caret-color: #6ea8ff; /* 文本透明、光标可见 */
+}
+.bf-codefield-input::placeholder { color: #55628c; }
+.bf-codefield-input::selection { background: rgba(79,110,247,.35); }
+/* 高亮配色 */
+.bf-codefield .cf-kw { color: #c792ea; font-weight: 600; }
+.bf-codefield .cf-str { color: #9ce89a; }
+.bf-codefield .cf-num { color: #f78c6c; }
+.bf-codefield .cf-cmt { color: #5c6a94; font-style: italic; }
+
+/* 配置区字段描述更紧凑 */
+.bf-config .ant-form-item { margin-bottom: 14px; }

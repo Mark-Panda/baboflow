@@ -1,0 +1,22 @@
+# 构建上下文排除（加速 + 防泄漏）
+.git
+.gitignore
+.env
+*.log
+
+# 前端
+web/node_modules
+web/dist
+
+# 后端产物与本地产物
+bin/
+workspace/
+tmp/
+
+# 文档与设计
+docs/
+
+# 编辑器/系统
+.vscode
+.idea
+.DS_Store

@@ -1,0 +1,23 @@
+# 依赖
+node_modules/
+web/node_modules/
+
+# 构建产物
+web/dist/
+baboflow
+*.exe
+
+# 环境与密钥
+.env
+
+# Agent 工作区
+workspace/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# 日志
+*.log
