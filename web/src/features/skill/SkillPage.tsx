@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  App, Button, Card, Drawer, Input, Modal, Popconfirm, Select, Space, Table, Tag, Tooltip,
+  App, Button, Card, Drawer, Input, Modal, Popconfirm, Select, Space, Table, Tabs, Tag, Tooltip,
 } from 'antd';
 import {
   PlusOutlined, ReloadOutlined, SearchOutlined, EyeOutlined, DeleteOutlined,
@@ -10,9 +10,9 @@ import type { ColumnsType } from 'antd/es/table';
 import { skillApi, Skill } from '@/api/skill';
 
 const SOURCE_LABEL: Record<string, { color: string; text: string }> = {
-  component: { color: 'blue', text: '组件' },
+  component: { color: 'blue', text: '系统组件' },
   chain: { color: 'green', text: '规则链' },
-  upload: { color: 'default', text: '上传' },
+  upload: { color: 'orange', text: '业务组件' },
   agent: { color: 'purple', text: 'Agent' },
 };
 
@@ -27,6 +27,8 @@ export default function SkillPage() {
   const [loading, setLoading] = useState(false);
   const [keyword, setKeyword] = useState('');
   const [source, setSource] = useState<string | undefined>(undefined);
+  const requestSeq = useRef(0);
+  const detailRequestSeq = useRef(0);
 
   // 查看详情
   const [viewing, setViewing] = useState<Skill | null>(null);
@@ -38,14 +40,19 @@ export default function SkillPage() {
   const [uploading, setUploading] = useState(false);
 
   const load = useCallback(async () => {
+    const seq = ++requestSeq.current;
     setLoading(true);
     try {
       const res = await skillApi.list({ source, keyword });
-      setData(res.list || []);
+      if (seq === requestSeq.current) {
+        setData(res.list || []);
+      }
     } catch {
       /* 拦截器已提示 */
     } finally {
-      setLoading(false);
+      if (seq === requestSeq.current) {
+        setLoading(false);
+      }
     }
   }, [source, keyword]);
 
@@ -53,18 +60,28 @@ export default function SkillPage() {
     load();
   }, [load]);
 
-  const onView = async (r: Skill) => {
+  const onView = useCallback(async (r: Skill) => {
+    const seq = ++detailRequestSeq.current;
     setViewLoading(true);
     setViewing(r);
     try {
       const full = await skillApi.get(r.id);
-      setViewing(full);
+      if (seq === detailRequestSeq.current) {
+        setViewing(full);
+      }
     } catch {
       /* 拦截器已提示 */
     } finally {
-      setViewLoading(false);
+      if (seq === detailRequestSeq.current) {
+        setViewLoading(false);
+      }
     }
-  };
+  }, []);
+
+  const closeViewing = useCallback(() => {
+    detailRequestSeq.current += 1;
+    setViewing(null);
+  }, []);
 
   const onUpload = async () => {
     if (!uploadText.trim()) {
@@ -85,16 +102,20 @@ export default function SkillPage() {
     }
   };
 
-  const onDelete = async (r: Skill) => {
+  const onDelete = useCallback(async (r: Skill) => {
     await skillApi.remove(r.id);
     message.success('已删除');
     load();
-  };
+  }, [load, message]);
 
   const columns: ColumnsType<Skill> = useMemo(() => [
     {
       title: '名称', dataIndex: 'name', key: 'name',
-      render: (v, r) => <a onClick={() => onView(r)}>{v}</a>,
+      render: (v, r) => (
+        <Button type="link" style={{ padding: 0 }} onClick={() => onView(r)}>
+          {v}
+        </Button>
+      ),
     },
     { title: '描述', dataIndex: 'description', key: 'description', ellipsis: true },
     { title: '来源', dataIndex: 'source', key: 'source', width: 90, render: (v) => <SourceTag value={v} /> },
@@ -108,15 +129,15 @@ export default function SkillPage() {
       render: (_, r) => (
         <Space size="small">
           <Tooltip title="查看">
-            <Button size="small" icon={<EyeOutlined />} onClick={() => onView(r)} />
+            <Button aria-label="查看 SKILL" size="small" icon={<EyeOutlined />} onClick={() => onView(r)} />
           </Tooltip>
           <Popconfirm title="确认删除该 SKILL？" onConfirm={() => onDelete(r)}>
-            <Button size="small" danger icon={<DeleteOutlined />} />
+            <Button aria-label="删除 SKILL" size="small" danger icon={<DeleteOutlined />} />
           </Popconfirm>
         </Space>
       ),
     },
-  ], []);
+  ], [onDelete, onView]);
 
   return (
     <div className="bf-page">
@@ -131,9 +152,9 @@ export default function SkillPage() {
               value={source}
               onChange={(v) => setSource(v)}
               options={[
-                { value: 'component', label: '组件' },
+                { value: 'component', label: '系统组件' },
                 { value: 'chain', label: '规则链' },
-                { value: 'upload', label: '上传' },
+                { value: 'upload', label: '业务组件' },
                 { value: 'agent', label: 'Agent' },
               ]}
             />
@@ -144,13 +165,25 @@ export default function SkillPage() {
               style={{ width: 220 }}
               onChange={(e) => setKeyword(e.target.value)}
             />
-            <Button icon={<ReloadOutlined />} onClick={load} />
+            <Button aria-label="刷新 SKILL 列表" icon={<ReloadOutlined />} onClick={load} />
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setUploadOpen(true)}>
               上传 SKILL
             </Button>
           </Space>
         }
       >
+        <Tabs
+          activeKey={source || 'all'}
+          onChange={(key) => setSource(key === 'all' ? undefined : key)}
+          items={[
+            { key: 'all', label: '全部 SKILL' },
+            { key: 'component', label: '系统组件' },
+            { key: 'upload', label: '业务组件' },
+            { key: 'chain', label: '规则链' },
+            { key: 'agent', label: 'Agent' },
+          ]}
+          style={{ marginTop: -8 }}
+        />
         <Table
           rowKey="id"
           loading={loading}
@@ -165,7 +198,7 @@ export default function SkillPage() {
         title={viewing ? `SKILL · ${viewing.name}` : 'SKILL'}
         width={720}
         open={!!viewing}
-        onClose={() => setViewing(null)}
+        onClose={closeViewing}
         loading={viewLoading}
       >
         {viewing && (
