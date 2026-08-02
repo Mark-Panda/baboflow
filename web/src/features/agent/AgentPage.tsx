@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Avatar, Button, Card, Col, Drawer, Empty, Input, Row, Spin, Tag } from 'antd';
-import { RobotOutlined, MessageOutlined, SearchOutlined, ReloadOutlined, ToolOutlined } from '@ant-design/icons';
+import { Avatar, Button, Card, Col, Drawer, Empty, Input, Row, Space, Spin, Tag } from 'antd';
+import { RobotOutlined, MessageOutlined, SearchOutlined, ReloadOutlined, ToolOutlined, PlusOutlined, EditOutlined } from '@ant-design/icons';
 
 import * as api from '@/api/agent';
 import AgentChat from './AgentChat';
+import AgentEditor from './AgentEditor';
 
-// Agent 页：卡片网格（含内置通用助手）+ 点击打开对话抽屉。
+// Agent 页：卡片网格 + 新建/编辑 Agent + 点击打开对话抽屉。
 export default function AgentPage() {
   const [list, setList] = useState<api.Agent[]>([]);
   const [loading, setLoading] = useState(false);
   const [keyword, setKeyword] = useState('');
   const [chatAgent, setChatAgent] = useState<api.Agent | null>(null);
+  // 编辑器：undefined=关闭，null=新建，Agent=编辑
+  const [editing, setEditing] = useState<api.Agent | null | undefined>(undefined);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -38,9 +41,14 @@ export default function AgentPage() {
           style={{ width: 280 }}
           onChange={(e) => setKeyword(e.target.value)}
         />
-        <Button icon={<ReloadOutlined />} onClick={load}>
-          刷新
-        </Button>
+        <Space>
+          <Button icon={<ReloadOutlined />} onClick={load}>
+            刷新
+          </Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditing(null)}>
+            新建 Agent
+          </Button>
+        </Space>
       </div>
 
       <Spin spinning={loading}>
@@ -61,6 +69,14 @@ export default function AgentPage() {
                       disabled={!a.enabled}
                     >
                       对话
+                    </Button>,
+                    <Button
+                      key="edit"
+                      type="link"
+                      icon={<EditOutlined />}
+                      onClick={() => setEditing(a)}
+                    >
+                      编辑
                     </Button>,
                   ]}
                 >
@@ -114,6 +130,15 @@ export default function AgentPage() {
       >
         {chatAgent && <AgentChat agent={chatAgent} />}
       </Drawer>
+
+      <AgentEditor
+        agent={editing === undefined ? null : editing}
+        open={editing !== undefined}
+        onClose={(saved) => {
+          setEditing(undefined);
+          if (saved) load();
+        }}
+      />
     </div>
   );
 }

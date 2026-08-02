@@ -154,6 +154,14 @@ func (uc *AgentUsecase) Update(ctx context.Context, key string, in *AgentInput) 
 	if err != nil {
 		return ErrNotFound
 	}
+	// 内置 Agent 仅允许改挂载（技能/MCP/子 Agent）与启用开关；
+	// 名称、系统提示、模型、内置工具等核心定义锁定，防止绕过前端直接调 API 篡改。
+	if a.IsBuiltin {
+		in.Name = a.Name
+		in.Instruction = a.Instruction
+		in.LLMModelID = a.LLMModelID
+		in.BuiltinTools = decodeStrings(a.BuiltinTools)
+	}
 	applyAgentInput(a, in)
 	if in.Enabled != nil {
 		a.Enabled = *in.Enabled
@@ -202,6 +210,13 @@ func mustJSON(v any, def string) datatypes.JSON {
 		return datatypes.JSON([]byte(def))
 	}
 	return datatypes.JSON(b)
+}
+
+// decodeStrings 把 jsonb 字符串数组解回 []string（用于内置 Agent 锁定时回填现有值）。
+func decodeStrings(j datatypes.JSON) []string {
+	var out []string
+	_ = json.Unmarshal(j, &out)
+	return out
 }
 
 // ---- 会话 ----
