@@ -3,9 +3,9 @@ import {
   App,
   Breadcrumb,
   Button,
+  Drawer,
   Form,
   Input,
-  Popover,
   Space,
   Spin,
   Tag,
@@ -30,16 +30,16 @@ import ComponentPalette from "./ComponentPalette";
 import FlowCanvas from "./FlowCanvas";
 import NodeConfigPanel from "./NodeConfigPanel";
 import DebugPanel from "./DebugPanel";
-import JsonField from "./JsonField";
+import InputSchemaField from "./InputSchemaField";
 import {
   dslToFlow,
   flowToDsl,
-  layoutFlow,
   isContainerType,
   relationTypesForNode,
   RuleNodeData,
   DslChain,
 } from "./chainDsl";
+import { layoutFlowElk } from "./elkLayout";
 import { useCanvasStore } from "@/stores/canvasStore";
 import "./canvas.css";
 import "@xyflow/react/dist/style.css";
@@ -285,9 +285,14 @@ export default function ChainEditorPage() {
     [cur.nodes, cur.edges, setCur],
   );
 
-  const onLayout = useCallback(() => {
-    setCur({ nodes: layoutFlow(cur.nodes, cur.edges) });
-    message.success("已自动整理布局");
+  const onLayout = useCallback(async () => {
+    try {
+      const laid = await layoutFlowElk(cur.nodes, cur.edges);
+      setCur({ nodes: laid });
+      message.success("已自动整理布局");
+    } catch {
+      message.error("自动布局失败");
+    }
   }, [cur.nodes, cur.edges, setCur, message]);
 
   // ---- 构建 DSL ----
@@ -462,28 +467,9 @@ export default function ChainEditorPage() {
             style={{ width: 240, fontWeight: 600, fontSize: 14 }}
             placeholder="规则链名称"
           />
-          <Popover
-            open={settingsOpen}
-            onOpenChange={setSettingsOpen}
-            trigger="click"
-            placement="bottomLeft"
-            arrow={false}
-            content={
-              <ChainSettingsForm
-                description={description}
-                inputSchema={inputSchema}
-                onChange={(patch) => {
-                  if ("description" in patch) setDescription(patch.description ?? "");
-                  if ("inputSchema" in patch) setInputSchema(patch.inputSchema);
-                  setDirty(true);
-                }}
-              />
-            }
-          >
-            <Tooltip title="链设置：描述与入参格式（供 MCP / SKILL 调用方参考）">
-              <Button type="text" icon={<SettingOutlined />} />
-            </Tooltip>
-          </Popover>
+          <Tooltip title="链设置：描述与入参格式（供 MCP / SKILL 调用方参考）">
+            <Button type="text" icon={<SettingOutlined />} onClick={() => setSettingsOpen(true)} />
+          </Tooltip>
           <Tag
             color={status === "published" ? "green" : "default"}
             style={{ marginLeft: 4 }}
@@ -591,6 +577,23 @@ export default function ChainEditorPage() {
           />
         </div>
       </div>
+
+      <Drawer
+        title="链设置 · 描述与入参格式"
+        width={720}
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+      >
+        <ChainSettingsForm
+          description={description}
+          inputSchema={inputSchema}
+          onChange={(patch) => {
+            if ("description" in patch) setDescription(patch.description ?? "");
+            if ("inputSchema" in patch) setInputSchema(patch.inputSchema);
+            setDirty(true);
+          }}
+        />
+      </Drawer>
     </ReactFlowProvider>
   );
 }
@@ -610,32 +613,28 @@ function ChainSettingsForm({
   }) => void;
 }) {
   return (
-    <div style={{ width: 380 }}>
+    <div>
       <Form layout="vertical" size="small">
         <Form.Item
           label="规则链描述"
-          style={{ marginBottom: 12 }}
+          style={{ marginBottom: 16 }}
           tooltip="说明这条链做什么，会展示在列表、并写入生成的 SKILL / MCP 工具描述"
         >
           <Input.TextArea
-            rows={2}
+            rows={3}
             value={description}
             placeholder="这条规则链做什么？"
             onChange={(e) => onChange({ description: e.target.value })}
           />
         </Form.Item>
         <Form.Item
-          label="入参 JSON Schema（可选）"
+          label="入参格式（JSON Schema，可选）"
           style={{ marginBottom: 0 }}
-          tooltip="声明调用方应传的消息体结构；MCP 暴露与 SKILL 生成会用它说明如何传参"
+          tooltip="声明调用方应传的消息体结构；MCP 暴露与 SKILL 生成会用它说明如何传参。表格/JSON 双视图实时同步，描述列即字段注释。"
         >
-          <JsonField
-            rows={6}
+          <InputSchemaField
             value={inputSchema}
-            onChange={(v) =>
-              onChange({ inputSchema: v as Record<string, unknown> | undefined })
-            }
-            placeholder='{"type":"object","properties":{"t":{"type":"number","description":"温度"}},"required":["t"]}'
+            onChange={(v) => onChange({ inputSchema: v })}
           />
         </Form.Item>
       </Form>

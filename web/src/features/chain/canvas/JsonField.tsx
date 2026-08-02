@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
 
 import CodeField from '@/components/CodeField';
+import { parseJsonc } from './schemaParams';
 
 export interface JsonFieldProps {
   value?: unknown;
   onChange?: (v: unknown) => void;
   rows?: number;
   placeholder?: string;
+  /** 允许 // 与 块注释（JSONC）；解析前剥离注释。默认 false 保持严格 JSON。 */
+  allowComments?: boolean;
 }
 
 // JSON 对象/数组编辑器：受控包一层 CodeField(language=json)。
@@ -16,6 +19,7 @@ export default function JsonField({
   onChange,
   rows = 6,
   placeholder,
+  allowComments = false,
 }: JsonFieldProps) {
   const [text, setText] = useState(() => stringify(value));
 
@@ -33,7 +37,7 @@ export default function JsonField({
       return;
     }
     try {
-      onChange?.(JSON.parse(trimmed));
+      onChange?.(allowComments ? parseJsonc(trimmed) : JSON.parse(trimmed));
     } catch {
       // 非法 JSON：只更新本地文本，等待用户修正
     }

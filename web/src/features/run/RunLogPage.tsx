@@ -11,13 +11,16 @@ import { runApi, ChainRun } from '@/api/run';
 import { chainApi, ChainListItem } from '@/api/chain';
 import { componentApi } from '@/api/component';
 import StatusTag from '@/components/StatusTag';
-import { dslToFlow, layoutFlow, DslChain } from '../chain/canvas/chainDsl';
+import { dslToFlow, EDGE_TYPE, DslChain } from '../chain/canvas/chainDsl';
+import { layoutFlowElk } from '../chain/canvas/elkLayout';
 import RuleNode from '../chain/canvas/nodes/RuleNode';
 import ContainerNode from '../chain/canvas/nodes/ContainerNode';
+import AvoidEdge from '../chain/canvas/edges/AvoidEdge';
 import '../chain/canvas/canvas.css';
 import '@xyflow/react/dist/style.css';
 
 const nodeTypes = { rule: RuleNode, container: ContainerNode };
+const edgeTypes = { [EDGE_TYPE]: AvoidEdge };
 const TRIGGER_LABEL: Record<string, string> = { manual: '手动', task: '看板', mcp: 'MCP', cron: '定时' };
 
 export default function RunLogPage() {
@@ -134,8 +137,8 @@ function RunDetailDrawer({ run, chainName, onClose }: { run: ChainRun | null; ch
         data: { ...n.data, __replay: true },
         className: stateMap.has(n.id) ? `st-${stateMap.get(n.id)}` : 'st-skipped',
       }));
-      setFlowNodes(layoutFlow(colored, edges));
-      setFlowEdges(edges.map((e) => ({ ...e, markerEnd: { type: MarkerType.ArrowClosed } })));
+      setFlowEdges(edges.map((e) => ({ ...e, type: EDGE_TYPE, markerEnd: { type: MarkerType.ArrowClosed } })));
+      layoutFlowElk(colored, edges).then(setFlowNodes).catch(() => setFlowNodes(colored));
     }).catch(() => { setFlowNodes([]); setFlowEdges([]); });
   }, [run]);
 
@@ -148,7 +151,7 @@ function RunDetailDrawer({ run, chainName, onClose }: { run: ChainRun | null; ch
       ) : (
         <ReactFlowProvider>
           <ReactFlow
-            nodes={flowNodes} edges={flowEdges} nodeTypes={nodeTypes}
+            nodes={flowNodes} edges={flowEdges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
             fitView nodesDraggable={false} nodesConnectable={false} elementsSelectable={false}
             zoomOnScroll panOnDrag proOptions={{ hideAttribution: true }}
           >

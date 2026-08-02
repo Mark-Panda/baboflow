@@ -1,7 +1,9 @@
-// 规则链画布：RuleGo DSL <-> ReactFlow 互转、dagre 自动布局。
-import dagre from 'dagre';
+// 规则链画布：RuleGo DSL <-> ReactFlow 互转。
 import type { Edge, Node } from '@xyflow/react';
 import type { ComponentMeta } from '@/api/component';
+
+// 自定义绕障边类型（AvoidEdge），dslToFlow/新建连线统一用它渲染。
+export const EDGE_TYPE = 'avoid';
 
 // ---- RuleGo DSL 类型 ----
 export interface DslNode {
@@ -114,6 +116,7 @@ export function dslToFlow(
     const relationType = c.type || 'Success';
     return {
       id: `${c.fromId}->${c.toId}:${relationType}`,
+      type: EDGE_TYPE,
       source: c.fromId,
       target: c.toId,
       sourceHandle: relationType,
@@ -189,37 +192,8 @@ export function flowToDsl(
   };
 }
 
-// ---- dagre 自动布局（DAG 分层）----
-const NODE_W = 200;
-const NODE_H = 64;
-const CONTAINER_W = 260;
-const CONTAINER_H = 96;
-
-export function layoutFlow(nodes: Node[], edges: Edge[]): Node[] {
-  if (nodes.length === 0) return nodes;
-  const g = new dagre.graphlib.Graph({ multigraph: true });
-  g.setGraph({ rankdir: 'LR', nodesep: 60, ranksep: 120, marginx: 40, marginy: 40 });
-  g.setDefaultEdgeLabel(() => ({}));
-  nodes.forEach((n) => {
-    const isC = n.type === 'container';
-    const d = n.data as RuleNodeData;
-    const relationCount = d.relationTypes?.length ?? DEFAULT_RELATION_TYPES.length;
-    const height = Math.max(isC ? CONTAINER_H : NODE_H, relationCount * 24 + 32);
-    g.setNode(n.id, { width: isC ? CONTAINER_W : NODE_W, height });
-  });
-  edges.forEach((e) => g.setEdge(e.source, e.target, {}, e.id));
-  dagre.layout(g);
-  return nodes.map((n) => {
-    const pos = g.node(n.id);
-    if (!pos) return n;
-    const isC = n.type === 'container';
-    const w = isC ? CONTAINER_W : NODE_W;
-    const d = n.data as RuleNodeData;
-    const relationCount = d.relationTypes?.length ?? DEFAULT_RELATION_TYPES.length;
-    const h = Math.max(isC ? CONTAINER_H : NODE_H, relationCount * 24 + 32);
-    return { ...n, position: { x: pos.x - w / 2, y: pos.y - h / 2 } };
-  });
-}
+// ---- 自动布局已迁移至 elkLayout.ts（ELK layered）----
+// 节点尺寸估计常量与布局实现见 elkLayout.ts；此处不再依赖 dagre。
 
 let seq = 0;
 export function genNodeId(ruleType: string): string {

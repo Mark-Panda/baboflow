@@ -11,6 +11,7 @@ import type { ColumnsType } from 'antd/es/table';
 
 import { mcpApi, McpServer, McpServerInput, McpExposure, McpTransport } from '@/api/mcp';
 import { chainApi, ChainListItem } from '@/api/chain';
+import InputSchemaField from '@/features/chain/canvas/InputSchemaField';
 
 const TRANSPORT_LABEL: Record<string, string> = {
   sse: 'SSE',
@@ -247,7 +248,7 @@ function ExposurePanel() {
   const [exposeOpen, setExposeOpen] = useState(false);
   const [chains, setChains] = useState<ChainListItem[]>([]);
   const [saving, setSaving] = useState(false);
-  const [form] = Form.useForm<{ chainId: string; toolName: string; description?: string; schemaText?: string }>();
+  const [form] = Form.useForm<{ chainId: string; toolName: string; description?: string; inputSchema?: Record<string, unknown> }>();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -283,10 +284,10 @@ function ExposurePanel() {
       form.setFieldsValue({
         chainId,
         description: chain.description || form.getFieldValue('description'),
-        schemaText:
+        inputSchema:
           chain.inputSchema && Object.keys(chain.inputSchema).length > 0
-            ? JSON.stringify(chain.inputSchema, null, 2)
-            : form.getFieldValue('schemaText'),
+            ? chain.inputSchema
+            : form.getFieldValue('inputSchema'),
       });
     } catch {
       /* 拦截器已提示 */
@@ -295,15 +296,7 @@ function ExposurePanel() {
 
   const onExpose = async () => {
     const v = await form.validateFields();
-    let schema: Record<string, unknown> | undefined;
-    if (v.schemaText && v.schemaText.trim()) {
-      try {
-        schema = JSON.parse(v.schemaText);
-      } catch {
-        message.error('入参 schema 需为合法 JSON');
-        return;
-      }
-    }
+    const schema = v.inputSchema && Object.keys(v.inputSchema).length > 0 ? v.inputSchema : undefined;
     setSaving(true);
     try {
       const res = await mcpApi.expose(v.chainId, { toolName: v.toolName, description: v.description, inputSchema: schema });
@@ -373,8 +366,10 @@ function ExposurePanel() {
         okText="暴露"
         cancelText="取消"
         destroyOnClose
+        width={680}
       >
-        <Form form={form} layout="vertical" style={{ marginTop: 12 }}>
+        {/* forceRender：确保 Form 在打开前已挂载，onChainChange 的 setFieldsValue 预填不丢失 */}
+        <Form form={form} layout="vertical" style={{ marginTop: 12 }} preserve={false}>
           <Form.Item name="chainId" label="规则链（仅已发布）" rules={[{ required: true, message: '请选择规则链' }]}>
             <Select
               showSearch
@@ -397,8 +392,12 @@ function ExposurePanel() {
           <Form.Item name="description" label="描述">
             <Input.TextArea rows={2} placeholder="工具用途，供 MCP 客户端/LLM 理解" />
           </Form.Item>
-          <Form.Item name="schemaText" label="入参 JSON Schema（可选，默认 {data: string}）">
-            <Input.TextArea rows={5} placeholder='{"type":"object","properties":{...}}' style={{ fontFamily: 'monospace' }} />
+          <Form.Item
+            name="inputSchema"
+            label="入参格式（JSON Schema，可选，默认 {data: string}）"
+            tooltip="结构化编辑：参数表格 ↔ JSON 源码双视图，描述列即字段注释"
+          >
+            <InputSchemaField />
           </Form.Item>
         </Form>
       </Modal>

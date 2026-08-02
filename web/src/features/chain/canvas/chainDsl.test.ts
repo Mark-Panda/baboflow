@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   dslToFlow,
   flowToDsl,
-  layoutFlow,
+  EDGE_TYPE,
   isContainerType,
   relationTypesForNode,
   type DslChain,
@@ -52,9 +52,10 @@ describe('dslToFlow', () => {
     const loop = nodes.find((n) => n.id === 'loop')!;
     expect(loop.type).toBe('container');
     expect((loop.data as { subFlow?: { nodes: unknown[] } }).subFlow?.nodes).toHaveLength(1);
-    // 连线
+    // 连线（自定义绕障边类型）
     expect(edges[0].source).toBe('n1');
     expect(edges[0].target).toBe('n2');
+    expect(edges[0].type).toBe(EDGE_TYPE);
     expect(edges[0].data?.relationType).toBe('Success');
     expect(edges[0].sourceHandle).toBe('Success');
   });
@@ -118,18 +119,5 @@ describe('flowToDsl', () => {
     ]);
     expect(dsl.metadata?.connections?.map((connection) => connection.type))
       .toEqual(['True', 'False']);
-  });
-});
-
-describe('layoutFlow', () => {
-  it('为所有节点分配坐标', () => {
-    const { nodes, edges } = dslToFlow(sampleDsl);
-    // 清掉位置模拟无布局
-    const noPos = nodes.map((n) => ({ ...n, position: { x: 0, y: 0 } }));
-    const laid = layoutFlow(noPos, edges);
-    expect(laid).toHaveLength(3);
-    // dagre 应让节点分散开（不都在原点）
-    const xs = new Set(laid.map((n) => Math.round(n.position.x)));
-    expect(xs.size).toBeGreaterThan(1);
   });
 });

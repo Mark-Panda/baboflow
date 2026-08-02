@@ -2,15 +2,18 @@ import { useCallback } from 'react';
 import {
   ReactFlow, Background, Controls, MiniMap, addEdge, reconnectEdge,
   applyNodeChanges, applyEdgeChanges, useReactFlow,
+  ConnectionLineType,
   type Connection, type Edge, type Node, type NodeChange, type EdgeChange,
 } from '@xyflow/react';
 import { App } from 'antd';
 
 import RuleNode from './nodes/RuleNode';
 import ContainerNode from './nodes/ContainerNode';
+import AvoidEdge from './edges/AvoidEdge';
 import { ComponentMeta } from '@/api/component';
 import { DND_MIME } from './ComponentPalette';
 import {
+  EDGE_TYPE,
   genNodeId,
   isContainerType,
   relationClassName,
@@ -21,6 +24,7 @@ import { componentZhName } from './componentZh';
 import { useCanvasStore } from '@/stores/canvasStore';
 
 const nodeTypes = { rule: RuleNode, container: ContainerNode };
+const edgeTypes = { [EDGE_TYPE]: AvoidEdge };
 
 function edgeRelationType(edge: Edge): string {
   const relationType = (edge.data as { relationType?: unknown } | undefined)?.relationType;
@@ -87,6 +91,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
       props.onEdgesChange(
         addEdge({
           ...conn,
+          type: EDGE_TYPE,
           label: relationType,
           data: { relationType },
           className: relationClassName(relationType),
@@ -130,6 +135,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
         .map((e) => e.id === oldEdge.id
           ? {
               ...e,
+              type: EDGE_TYPE,
               label: relationType,
               data: { ...e.data, relationType },
               className: relationClassName(relationType),
@@ -177,6 +183,9 @@ export default function FlowCanvas(props: FlowCanvasProps) {
         nodes={nodes.map((n) => ({ ...n, data: { ...n.data, __onEnterSub: props.onEnterSub } }))}
         edges={edges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        defaultEdgeOptions={{ type: EDGE_TYPE }}
+        connectionLineType={ConnectionLineType.SmoothStep}
         onNodesChange={handleNodesChange}
         onEdgesChange={handleEdgesChange}
         onConnect={onConnect}
@@ -186,8 +195,9 @@ export default function FlowCanvas(props: FlowCanvasProps) {
         onNodeDoubleClick={(_, node) => { if (node.type === 'container') props.onEnterSub(node.id); }}
         deleteKeyCode={['Delete', 'Backspace']}
         multiSelectionKeyCode={['Meta', 'Control']}
-        selectionOnDrag
-        panOnDrag={[1, 2]}
+        selectionKeyCode={['Meta', 'Control']}
+        panOnDrag
+        selectionOnDrag={false}
         reconnectRadius={12}
         fitView
         minZoom={0.2}
@@ -196,6 +206,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
         <Background gap={16} size={1} color="#dfe3ee" />
         <MiniMap pannable zoomable style={{ width: 140, height: 90 }} />
         <Controls showInteractive={false} />
+        <div className="bf-canvas-hint">拖动空白平移 · 按住 ⌘/Ctrl 框选 · 滚轮缩放</div>
       </ReactFlow>
     </div>
   );

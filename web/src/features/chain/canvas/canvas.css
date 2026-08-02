@@ -5,6 +5,21 @@
   height: 100%;
 }
 
+/* 画布交互提示（右下角） */
+.bf-canvas-hint {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  z-index: 5;
+  font-size: 11px;
+  color: #9aa1b5;
+  background: rgba(255, 255, 255, 0.75);
+  padding: 2px 8px;
+  border-radius: 6px;
+  pointer-events: none;
+  user-select: none;
+}
+
 /* 自定义节点卡片 */
 .rule-node {
   position: relative;
