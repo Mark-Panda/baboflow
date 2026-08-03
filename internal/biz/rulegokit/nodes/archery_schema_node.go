@@ -3,6 +3,7 @@ package nodes
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"baboflow/internal/biz/rulegokit/archeryclient"
@@ -68,8 +69,23 @@ func (n *ArcherySchemaNode) Init(_ types.Config, configuration types.Configurati
 	if n.config.InstanceID <= 0 {
 		return errors.New("archerySchema 节点缺少必填配置 instanceId")
 	}
-	switch strings.TrimSpace(n.config.Resource) {
-	case schemaResDatabases, schemaResSchemas, schemaResTables, schemaResColumns:
+	res := strings.TrimSpace(n.config.Resource)
+	switch res {
+	case schemaResDatabases:
+		// 仅列出库，无需 dbName/schemaName/tableName。
+	case schemaResSchemas, schemaResTables:
+		// Archery 的 schema/table 列表接口强制要求 db_name。
+		if strings.TrimSpace(n.config.DBName) == "" {
+			return fmt.Errorf("archerySchema 浏览 %s 需要配置 dbName（数据库）", res)
+		}
+	case schemaResColumns:
+		// Archery 的 column 列表接口强制要求 db_name + tb_name。
+		if strings.TrimSpace(n.config.DBName) == "" {
+			return errors.New("archerySchema 浏览 columns 需要配置 dbName（数据库）")
+		}
+		if strings.TrimSpace(n.config.TableName) == "" {
+			return errors.New("archerySchema 浏览 columns 需要配置 tableName（表名）")
+		}
 	default:
 		return errors.New("archerySchema 节点 resource 必须是 databases/schemas/tables/columns 之一")
 	}
@@ -107,6 +123,12 @@ func (n *ArcherySchemaNode) OnMsg(ctx types.RuleContext, msg types.RuleMsg) {
 			ctx.TellFailure(msg, errors.New("archerySchema 浏览 columns 需要 tableName（配置或由消息提供）"))
 			return
 		}
+	}
+	// Archery 的 schema/table/column 列表接口强制要求 db_name，缺失会报
+	// “不支持的资源类型或者参数不完整！”。此处先行拦截并指明代填字段。
+	if rt != archeryclient.ResDatabase && db == "" {
+		ctx.TellFailure(msg, fmt.Errorf("archerySchema 浏览 %s 需要 dbName（配置或由消息提供）", resource))
+		return
 	}
 
 	cli, err := getClient(context.Background(), n.config.InstanceID)

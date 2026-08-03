@@ -119,8 +119,26 @@ func TestArcherySchemaNode_InitValidatesResource(t *testing.T) {
 	if err := n.Init(types.Config{}, types.Configuration{"instanceId": 1, "resource": "bogus"}); err == nil {
 		t.Fatal("expected error for invalid resource")
 	}
-	if err := n.Init(types.Config{}, types.Configuration{"instanceId": 1, "resource": "tables"}); err != nil {
+	// databases 不需要 dbName。
+	if err := n.Init(types.Config{}, types.Configuration{"instanceId": 1, "resource": "databases"}); err != nil {
+		t.Fatalf("databases should not require dbName: %v", err)
+	}
+	// schemas/tables 必须 dbName（Archery 服务端强制），缺失应在 Init 报错。
+	if err := n.Init(types.Config{}, types.Configuration{"instanceId": 1, "resource": "schemas"}); err == nil {
+		t.Fatal("expected error for schemas without dbName")
+	}
+	if err := n.Init(types.Config{}, types.Configuration{"instanceId": 1, "resource": "tables"}); err == nil {
+		t.Fatal("expected error for tables without dbName")
+	}
+	// columns 必须 dbName + tableName。
+	if err := n.Init(types.Config{}, types.Configuration{"instanceId": 1, "resource": "columns", "dbName": "orders"}); err == nil {
+		t.Fatal("expected error for columns without tableName")
+	}
+	if err := n.Init(types.Config{}, types.Configuration{"instanceId": 1, "resource": "tables", "dbName": "orders"}); err != nil {
 		t.Fatalf("unexpected init error: %v", err)
+	}
+	if err := n.Init(types.Config{}, types.Configuration{"instanceId": 1, "resource": "columns", "dbName": "orders", "tableName": "t1"}); err != nil {
+		t.Fatalf("unexpected init error for columns: %v", err)
 	}
 }
 
@@ -216,24 +234,13 @@ func TestArcherySchemaNode_OnMsgListsTables(t *testing.T) {
 	}
 }
 
+// columns 缺 tableName 现在在 Init 即拒绝（更早、信息更明确），无需运行期。
 func TestArcherySchemaNode_ColumnsRequiresTable(t *testing.T) {
-	srv := fakeArcheryServer(t)
-	defer srv.Close()
-	useFakeFactory(t, srv)
-
-	dsl := `{
-	  "ruleChain": {"id": "chain_archery_s_fail", "root": true},
-	  "metadata": {
-	    "nodes": [{"id": "s1", "type": "archerySchema",
-	       "configuration": {"instanceId": 1, "resource": "columns", "dbName": "orders"}}],
-	    "connections": []
-	  }
-	}`
-	res, err := runDSLForTest("chain_archery_s_fail", []byte(dsl), "JSON", `{}`, nil)
-	if err != nil {
-		t.Fatalf("run error: %v", err)
-	}
-	if res.Err == nil || !strings.Contains(res.Err.Error(), "tableName") {
-		t.Fatalf("expected tableName error, got %v", res.Err)
+	n := &ArcherySchemaNode{}
+	err := n.Init(types.Config{}, types.Configuration{
+		"instanceId": 1, "resource": "columns", "dbName": "orders",
+	})
+	if err == nil || !strings.Contains(err.Error(), "tableName") {
+		t.Fatalf("expected tableName init error, got %v", err)
 	}
 }
