@@ -5,7 +5,7 @@ web/node_modules/
 # 构建产物
 web/dist/
 *.tsbuildinfo
-baboflow
+# baboflow
 *.exe
 
 # 环境与密钥
