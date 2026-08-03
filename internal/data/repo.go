@@ -143,3 +143,43 @@ func (r *llmRepo) CountAgentByModel(ctx context.Context, modelID int64) (int64, 
 	err := r.db.WithContext(ctx).Model(&po.Agent{}).Where("llm_model_id = ?", modelID).Count(&n).Error
 	return n, err
 }
+
+// ---- ArcheryRepo ----
+
+type archeryRepo struct{ db *gorm.DB }
+
+func NewArcheryRepo(db *gorm.DB) biz.ArcheryRepo { return &archeryRepo{db: db} }
+
+func (r *archeryRepo) ListConnections(ctx context.Context) ([]po.ArcheryConnection, error) {
+	var list []po.ArcheryConnection
+	err := r.db.WithContext(ctx).Order("id asc").Find(&list).Error
+	return list, err
+}
+
+func (r *archeryRepo) GetConnection(ctx context.Context, id int64) (*po.ArcheryConnection, error) {
+	var c po.ArcheryConnection
+	if err := r.db.WithContext(ctx).First(&c, id).Error; err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+func (r *archeryRepo) GetConnectionByName(ctx context.Context, name string) (*po.ArcheryConnection, error) {
+	var c po.ArcheryConnection
+	if err := r.db.WithContext(ctx).Where("name = ?", name).First(&c).Error; err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+func (r *archeryRepo) CreateConnection(ctx context.Context, c *po.ArcheryConnection) error {
+	return r.db.WithContext(ctx).Create(c).Error
+}
+
+func (r *archeryRepo) UpdateConnection(ctx context.Context, c *po.ArcheryConnection) error {
+	return r.db.WithContext(ctx).Save(c).Error
+}
+
+func (r *archeryRepo) DeleteConnection(ctx context.Context, id int64) error {
+	return r.db.WithContext(ctx).Delete(&po.ArcheryConnection{}, id).Error
+}

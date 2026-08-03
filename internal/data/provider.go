@@ -9,6 +9,7 @@ var ProviderSet = wire.NewSet(
 	NewDB,
 	NewAuthRepo,
 	NewLLMRepo,
+	NewArcheryRepo,
 	NewComponentRepo,
 	NewRuleChainRepo,
 )

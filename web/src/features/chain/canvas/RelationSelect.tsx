@@ -7,6 +7,7 @@ import { listAgents } from '@/api/agent';
 import { llmApi } from '@/api/llm';
 import { mcpApi } from '@/api/mcp';
 import { skillApi } from '@/api/skill';
+import { archeryApi } from '@/api/archery';
 import type { RelationRef } from './fieldWidgets';
 
 export interface RelationSelectProps {
@@ -106,6 +107,13 @@ function useRelationOptions(relation: RelationRef): {
         case 'mcpServers': {
           const res = await mcpApi.listServers();
           return res.list.map((s) => ({ label: s.name, value: s.id }));
+        }
+        case 'archeryConnections': {
+          const res = await archeryApi.listConnections();
+          return res.list.map((c) => ({
+            label: `${c.name}（${c.instance}）`,
+            value: c.id,
+          }));
         }
         case 'skills': {
           const res = await skillApi.list({});

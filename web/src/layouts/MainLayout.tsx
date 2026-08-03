@@ -15,6 +15,7 @@ import {
   ApiOutlined,
   SafetyOutlined,
   ClockCircleOutlined,
+  DatabaseOutlined,
 } from '@ant-design/icons';
 import { useState } from 'react';
 
@@ -42,6 +43,7 @@ export default function MainLayout() {
     if (p.startsWith('/cron')) return '/cron';
     if (p.startsWith('/audit')) return '/audit';
     if (p.startsWith('/settings/llm')) return '/settings/llm';
+    if (p.startsWith('/settings/archery')) return '/settings/archery';
     return '/';
   }, [location.pathname]);
 
@@ -56,6 +58,7 @@ export default function MainLayout() {
     { key: '/mcp', icon: <ApiOutlined />, label: 'MCP' },
     { type: 'divider' as const },
     { key: '/settings/llm', icon: <SettingOutlined />, label: 'LLM 配置' },
+    { key: '/settings/archery', icon: <DatabaseOutlined />, label: 'Archery 连接' },
     { key: '/audit', icon: <SafetyOutlined />, label: '审计日志' },
   ];
 

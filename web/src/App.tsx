@@ -10,6 +10,7 @@ import ChainListPage from '@/features/chain/ChainListPage';
 import ChainEditorPage from '@/features/chain/canvas/ChainEditorPage';
 import RunLogPage from '@/features/run/RunLogPage';
 import LlmConfigPage from '@/features/llm/LlmConfigPage';
+import ArcheryPage from '@/features/archery/ArcheryPage';
 import AgentPage from '@/features/agent/AgentPage';
 import SkillPage from '@/features/skill/SkillPage';
 import McpPage from '@/features/mcp/McpPage';
@@ -71,6 +72,7 @@ export default function App() {
         <Route path="audit" element={<AuditPage />} />
         <Route path="cron" element={<CronPage />} />
         <Route path="settings/llm" element={<LlmConfigPage />} />
+        <Route path="settings/archery" element={<ArcheryPage />} />
         {/* 后续里程碑页面占位 */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

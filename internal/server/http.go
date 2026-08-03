@@ -24,6 +24,7 @@ func NewHTTPServer(
 	auth *biz.AuthUsecase,
 	authH *service.AuthHandler,
 	llmH *service.LLMHandler,
+	archeryH *service.ArcheryHandler,
 	compH *service.ComponentHandler,
 	chainH *service.RuleChainHandler,
 	agentH *service.AgentHandler,
@@ -129,6 +130,17 @@ func NewHTTPServer(
 			llm.DELETE("/models/:modelId", llmH.DeleteModel)
 			llm.POST("/models/:modelId/default", llmH.SetDefaultModel)
 			llm.POST("/models/:modelId/test", triggerLimiter, llmH.TestModel)
+		}
+
+		// Archery 连接
+		archery := authed.Group("/archery")
+		{
+			archery.GET("/connections", archeryH.ListConnections)
+			archery.POST("/connections", archeryH.CreateConnection)
+			archery.GET("/connections/:id", archeryH.GetConnection)
+			archery.PUT("/connections/:id", archeryH.UpdateConnection)
+			archery.DELETE("/connections/:id", archeryH.DeleteConnection)
+			archery.POST("/connections/:id/test", triggerLimiter, archeryH.TestConnection)
 		}
 
 		// 组件

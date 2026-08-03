@@ -37,6 +37,7 @@ func Migrate(db *gorm.DB, c *conf.Config) error {
 		&po.BoardColumn{},
 		&po.Task{},
 		&po.CronJob{},
+		&po.ArcheryConnection{},
 	}
 	if err := db.AutoMigrate(models...); err != nil {
 		return fmt.Errorf("auto migrate: %w", err)

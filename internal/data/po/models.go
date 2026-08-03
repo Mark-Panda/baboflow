@@ -338,3 +338,24 @@ type CronJob struct {
 }
 
 func (CronJob) TableName() string { return "cron_job" }
+
+// ---- Archery 连接（archery 节点凭据，密码 AES-GCM 加密，同 LLMProvider.APIKeyEnc）----
+
+// ArcheryConnection 描述一个 Archery（hhyo/Archery）平台的连接：节点按 ID 引用，
+// 密码密文存库（conf.Encrypt），接口回显一律脱敏，明文永不进 DSL/日志。
+type ArcheryConnection struct {
+	ID          int64     `gorm:"primaryKey" json:"id"`
+	TenantID    int64     `gorm:"index;not null;default:0" json:"tenantId"`
+	Name        string    `gorm:"size:128;uniqueIndex;not null" json:"name"`     // 便于人工识别的唯一名
+	Endpoint    string    `gorm:"size:255;not null" json:"endpoint"`             // 如 https://archery.example.com
+	Instance    string    `gorm:"size:128;not null" json:"instance"`             // Archery 中配置的实例名
+	Username    string    `gorm:"size:128;not null" json:"username"`             // 登录用户名
+	PasswordEnc string    `gorm:"size:512;not null;default:''" json:"-"`         // 密码密文（不输出）
+	Insecure    bool      `gorm:"not null;default:false" json:"insecure"`        // 跳过 TLS 校验（不安全）
+	CACert      string    `gorm:"type:text;not null;default:''" json:"caCert"`   // 额外信任的 CA（PEM 文本，可空）
+	Remark      string    `gorm:"size:512;not null;default:''" json:"remark"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+}
+
+func (ArcheryConnection) TableName() string { return "archery_connection" }

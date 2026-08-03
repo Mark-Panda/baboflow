@@ -58,6 +58,10 @@ const (
 	AuditLLMUpdate = "llm.update"
 	AuditLLMDelete = "llm.delete"
 
+	AuditArcheryCreate = "archery.create"
+	AuditArcheryUpdate = "archery.update"
+	AuditArcheryDelete = "archery.delete"
+
 	AuditChainPublish = "chain.publish"
 	AuditChainOffline = "chain.offline"
 	AuditChainDelete  = "chain.delete"
