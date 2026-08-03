@@ -108,12 +108,21 @@ function useRelationOptions(relation: RelationRef): {
           const res = await mcpApi.listServers();
           return res.list.map((s) => ({ label: s.name, value: s.id }));
         }
-        case 'archeryConnections': {
-          const res = await archeryApi.listConnections();
-          return res.list.map((c) => ({
-            label: `${c.name}（${c.instance}）`,
-            value: c.id,
-          }));
+        case 'archeryInstances': {
+          // 跨连接平铺所有已同步实例，标签带连接名以便区分同名实例。
+          const conns = (await archeryApi.listConnections()).list;
+          const grouped = await Promise.all(
+            conns.map(async (c) => ({
+              conn: c,
+              instances: (await archeryApi.listInstances(c.id)).list,
+            })),
+          );
+          return grouped.flatMap(({ conn, instances }) =>
+            instances.map((i) => ({
+              label: `${conn.name} / ${i.instanceName}${i.dbType ? `（${i.dbType}）` : ''}`,
+              value: i.id,
+            })),
+          );
         }
         case 'skills': {
           const res = await skillApi.list({});

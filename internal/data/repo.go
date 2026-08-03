@@ -2,6 +2,7 @@ package data
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"baboflow/internal/biz"
@@ -182,4 +183,45 @@ func (r *archeryRepo) UpdateConnection(ctx context.Context, c *po.ArcheryConnect
 
 func (r *archeryRepo) DeleteConnection(ctx context.Context, id int64) error {
 	return r.db.WithContext(ctx).Delete(&po.ArcheryConnection{}, id).Error
+}
+
+// ---- Archery 实例 ----
+
+func (r *archeryRepo) ListInstances(ctx context.Context, connectionID int64) ([]po.ArcheryInstance, error) {
+	var list []po.ArcheryInstance
+	err := r.db.WithContext(ctx).Where("connection_id = ?", connectionID).Order("instance_name asc").Find(&list).Error
+	return list, err
+}
+
+func (r *archeryRepo) GetInstance(ctx context.Context, id int64) (*po.ArcheryInstance, error) {
+	var in po.ArcheryInstance
+	if err := r.db.WithContext(ctx).First(&in, id).Error; err != nil {
+		return nil, err
+	}
+	return &in, nil
+}
+
+// UpsertInstance 按 (connection_id, instance_name) 存在则更新、不存在则新建。
+func (r *archeryRepo) UpsertInstance(ctx context.Context, in *po.ArcheryInstance) error {
+	var existing po.ArcheryInstance
+	err := r.db.WithContext(ctx).
+		Where("connection_id = ? AND instance_name = ?", in.ConnectionID, in.InstanceName).
+		First(&existing).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return r.db.WithContext(ctx).Create(in).Error
+	}
+	if err != nil {
+		return err
+	}
+	existing.DBType = in.DBType
+	return r.db.WithContext(ctx).Save(&existing).Error
+}
+
+// DeleteInstancesNotIn 删除该连接下不在 keep 名单里的实例（同步后清理已移除的）。
+func (r *archeryRepo) DeleteInstancesNotIn(ctx context.Context, connectionID int64, keep []string) error {
+	q := r.db.WithContext(ctx).Where("connection_id = ?", connectionID)
+	if len(keep) > 0 {
+		q = q.Where("instance_name NOT IN ?", keep)
+	}
+	return q.Delete(&po.ArcheryInstance{}).Error
 }

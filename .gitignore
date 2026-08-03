@@ -1,11 +1,12 @@
 # 依赖
 node_modules/
 web/node_modules/
+web/.pnpm-store/
 
 # 构建产物
 web/dist/
 *.tsbuildinfo
-# baboflow
+cmd/baboflow/baboflow
 *.exe
 
 # 环境与密钥

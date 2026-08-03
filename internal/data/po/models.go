@@ -341,21 +341,34 @@ func (CronJob) TableName() string { return "cron_job" }
 
 // ---- Archery 连接（archery 节点凭据，密码 AES-GCM 加密，同 LLMProvider.APIKeyEnc）----
 
-// ArcheryConnection 描述一个 Archery（hhyo/Archery）平台的连接：节点按 ID 引用，
+// ArcheryConnection 描述一个 Archery（hhyo/Archery）平台站点的连接：只含地址+登录凭据，
 // 密码密文存库（conf.Encrypt），接口回显一律脱敏，明文永不进 DSL/日志。
+// 其下可查询的实例见 ArcheryInstance（点「更新实例」时从 /group/user_all_instances/ 拉取）。
 type ArcheryConnection struct {
 	ID          int64     `gorm:"primaryKey" json:"id"`
 	TenantID    int64     `gorm:"index;not null;default:0" json:"tenantId"`
-	Name        string    `gorm:"size:128;uniqueIndex;not null" json:"name"`     // 便于人工识别的唯一名
-	Endpoint    string    `gorm:"size:255;not null" json:"endpoint"`             // 如 https://archery.example.com
-	Instance    string    `gorm:"size:128;not null" json:"instance"`             // Archery 中配置的实例名
-	Username    string    `gorm:"size:128;not null" json:"username"`             // 登录用户名
-	PasswordEnc string    `gorm:"size:512;not null;default:''" json:"-"`         // 密码密文（不输出）
-	Insecure    bool      `gorm:"not null;default:false" json:"insecure"`        // 跳过 TLS 校验（不安全）
-	CACert      string    `gorm:"type:text;not null;default:''" json:"caCert"`   // 额外信任的 CA（PEM 文本，可空）
+	Name        string    `gorm:"size:128;uniqueIndex;not null" json:"name"`   // 便于人工识别的唯一名
+	Endpoint    string    `gorm:"size:255;not null" json:"endpoint"`           // 如 https://archery.example.com
+	Username    string    `gorm:"size:128;not null" json:"username"`           // 登录用户名
+	PasswordEnc string    `gorm:"size:512;not null;default:''" json:"-"`       // 密码密文（不输出）
+	Insecure    bool      `gorm:"not null;default:false" json:"insecure"`      // 跳过 TLS 校验（不安全）
+	CACert      string    `gorm:"type:text;not null;default:''" json:"caCert"` // 额外信任的 CA（PEM 文本，可空）
 	Remark      string    `gorm:"size:512;not null;default:''" json:"remark"`
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
 }
 
 func (ArcheryConnection) TableName() string { return "archery_connection" }
+
+// ArcheryInstance 是某 Archery 连接（站点）下一个可查询实例。规则链节点按其实例 ID 引用；
+// 由「更新实例」从 Archery 拉取（upsert），instance_name 即节点查询时的 instance_name。
+type ArcheryInstance struct {
+	ID           int64     `gorm:"primaryKey" json:"id"`
+	ConnectionID int64     `gorm:"index;not null" json:"connectionId"`                                  // 所属 archery_connection
+	InstanceName string    `gorm:"size:128;not null;uniqueIndex:uniq_conn_instance" json:"instanceName"` // Archery 实例名
+	DBType       string    `gorm:"size:32;not null;default:''" json:"dbType"`                            // mysql/postgresql/...
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
+}
+
+func (ArcheryInstance) TableName() string { return "archery_instance" }

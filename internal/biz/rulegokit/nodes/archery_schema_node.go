@@ -25,10 +25,10 @@ const (
 
 // ArcherySchemaNodeConfiguration archery schema 浏览节点配置。
 type ArcherySchemaNodeConfiguration struct {
-	// ConnectionID 引用的 archery_connection 的 ID。
-	ConnectionID int64 `json:"connectionId" label:"Archery连接" desc:"要浏览的 Archery 连接（在连接管理中配置）" required:"true"`
+	// InstanceID 引用的 archery_instance 的 ID（实例=某连接下一个可查询数据源）。
+	InstanceID int64 `json:"instanceId" label:"Archery实例" desc:"要浏览的 Archery 实例（在连接管理中同步）" required:"true"`
 	// Resource 浏览对象：databases/schemas/tables/columns。
-	Resource string `json:"resource" label:"浏览对象" desc:"databases=库 schemas=schema tables=表 columns=字段" required:"true"`
+	Resource string `json:"resource" label:"浏览对象" desc:"databases=库 schemas=schema tables=表 columns=字段" required:"true" component:"{\"type\":\"select\",\"options\":[{\"label\":\"databases（库）\",\"value\":\"databases\"},{\"label\":\"schemas（schema）\",\"value\":\"schemas\"},{\"label\":\"tables（表）\",\"value\":\"tables\"},{\"label\":\"columns（字段）\",\"value\":\"columns\"}]}"`
 	// DBName 目标库；schemas/tables/columns 需要。留空取消息 dbName。
 	DBName string `json:"dbName" label:"数据库" desc:"schemas/tables/columns 必填；留空由上游消息 dbName 指定"`
 	// SchemaName 目标 schema；tables/columns 可用。留空取消息 schemaName。
@@ -65,8 +65,8 @@ func (n *ArcherySchemaNode) Init(_ types.Config, configuration types.Configurati
 	if err := maps.Map2Struct(configuration, &n.config); err != nil {
 		return err
 	}
-	if n.config.ConnectionID <= 0 {
-		return errors.New("archerySchema 节点缺少必填配置 connectionId")
+	if n.config.InstanceID <= 0 {
+		return errors.New("archerySchema 节点缺少必填配置 instanceId")
 	}
 	switch strings.TrimSpace(n.config.Resource) {
 	case schemaResDatabases, schemaResSchemas, schemaResTables, schemaResColumns:
@@ -109,7 +109,7 @@ func (n *ArcherySchemaNode) OnMsg(ctx types.RuleContext, msg types.RuleMsg) {
 		}
 	}
 
-	cli, err := getClient(context.Background(), n.config.ConnectionID)
+	cli, err := getClient(context.Background(), n.config.InstanceID)
 	if err != nil {
 		ctx.TellFailure(msg, err)
 		return

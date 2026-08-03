@@ -61,9 +61,9 @@ func fakeArcheryServer(t *testing.T) *httptest.Server {
 // useFakeFactory 注入一个总是返回指向 fake Archery 的客户端的工厂，并返回清理函数。
 func useFakeFactory(t *testing.T, srv *httptest.Server) {
 	t.Helper()
-	SetArcheryClientFactory(func(_ context.Context, connectionID int64) (*archeryclient.Client, error) {
-		if connectionID != 1 {
-			return nil, errors.New("unexpected connectionID")
+	SetArcheryClientFactory(func(_ context.Context, instanceID int64) (*archeryclient.Client, error) {
+		if instanceID != 1 {
+			return nil, errors.New("unexpected instanceID")
 		}
 		return archeryclient.New(archeryclient.Config{
 			Endpoint: srv.URL, Instance: "prod", Username: "u", Password: "p",
@@ -101,12 +101,12 @@ func TestArcheryNodes_Registered(t *testing.T) {
 	}
 }
 
-func TestArcheryQueryNode_InitRequiresConnectionID(t *testing.T) {
+func TestArcheryQueryNode_InitRequiresInstanceID(t *testing.T) {
 	n := &ArcheryQueryNode{}
 	if err := n.Init(types.Config{}, types.Configuration{}); err == nil {
-		t.Fatal("expected error when connectionId missing")
+		t.Fatal("expected error when instanceId missing")
 	}
-	if err := n.Init(types.Config{}, types.Configuration{"connectionId": 1}); err != nil {
+	if err := n.Init(types.Config{}, types.Configuration{"instanceId": 1}); err != nil {
 		t.Fatalf("unexpected init error: %v", err)
 	}
 	if n.config.LimitNum != 100 {
@@ -116,10 +116,10 @@ func TestArcheryQueryNode_InitRequiresConnectionID(t *testing.T) {
 
 func TestArcherySchemaNode_InitValidatesResource(t *testing.T) {
 	n := &ArcherySchemaNode{}
-	if err := n.Init(types.Config{}, types.Configuration{"connectionId": 1, "resource": "bogus"}); err == nil {
+	if err := n.Init(types.Config{}, types.Configuration{"instanceId": 1, "resource": "bogus"}); err == nil {
 		t.Fatal("expected error for invalid resource")
 	}
-	if err := n.Init(types.Config{}, types.Configuration{"connectionId": 1, "resource": "tables"}); err != nil {
+	if err := n.Init(types.Config{}, types.Configuration{"instanceId": 1, "resource": "tables"}); err != nil {
 		t.Fatalf("unexpected init error: %v", err)
 	}
 }
@@ -135,7 +135,7 @@ func TestArcheryQueryNode_OnMsgUsesMessageSQL(t *testing.T) {
 	  "metadata": {
 	    "nodes": [
 	      {"id": "q1", "type": "archeryQuery", "name": "查询",
-	       "configuration": {"connectionId": 1, "dbName": "orders"}}
+	       "configuration": {"instanceId": 1, "dbName": "orders"}}
 	    ],
 	    "connections": []
 	  }
@@ -168,7 +168,7 @@ func TestArcheryQueryNode_OnMsgFailureWhenNoSQL(t *testing.T) {
 	dsl := `{
 	  "ruleChain": {"id": "chain_archery_q_fail", "root": true},
 	  "metadata": {
-	    "nodes": [{"id": "q1", "type": "archeryQuery", "configuration": {"connectionId": 1}}],
+	    "nodes": [{"id": "q1", "type": "archeryQuery", "configuration": {"instanceId": 1}}],
 	    "connections": []
 	  }
 	}`
@@ -192,7 +192,7 @@ func TestArcherySchemaNode_OnMsgListsTables(t *testing.T) {
 	  "metadata": {
 	    "nodes": [
 	      {"id": "s1", "type": "archerySchema", "name": "列表",
-	       "configuration": {"connectionId": 1, "resource": "tables", "dbName": "orders"}}
+	       "configuration": {"instanceId": 1, "resource": "tables", "dbName": "orders"}}
 	    ],
 	    "connections": []
 	  }
@@ -225,7 +225,7 @@ func TestArcherySchemaNode_ColumnsRequiresTable(t *testing.T) {
 	  "ruleChain": {"id": "chain_archery_s_fail", "root": true},
 	  "metadata": {
 	    "nodes": [{"id": "s1", "type": "archerySchema",
-	       "configuration": {"connectionId": 1, "resource": "columns", "dbName": "orders"}}],
+	       "configuration": {"instanceId": 1, "resource": "columns", "dbName": "orders"}}],
 	    "connections": []
 	  }
 	}`

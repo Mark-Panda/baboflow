@@ -52,7 +52,7 @@ func (h *ArcheryHandler) GetConnection(c *gin.Context) {
 func (h *ArcheryHandler) CreateConnection(c *gin.Context) {
 	var in biz.ConnectionInput
 	if err := c.ShouldBindJSON(&in); err != nil {
-		httputil.BadRequest(c, "参数错误：name/endpoint/instance/username 必填")
+		httputil.BadRequest(c, "参数错误：name/endpoint/username 必填")
 		return
 	}
 	conn, err := h.uc.CreateConnection(c.Request.Context(), &in)
@@ -107,4 +107,34 @@ func (h *ArcheryHandler) TestConnection(c *gin.Context) {
 		return
 	}
 	httputil.OK(c, res)
+}
+
+// ListInstances 返回某连接下已同步的实例。
+func (h *ArcheryHandler) ListInstances(c *gin.Context) {
+	id, ok := pathID(c, "id")
+	if !ok {
+		return
+	}
+	list, err := h.uc.ListInstances(c.Request.Context(), id)
+	if err != nil {
+		httputil.Internal(c, err.Error())
+		return
+	}
+	httputil.OK(c, gin.H{"list": list})
+}
+
+// SyncInstances 重新从 Archery 拉取该连接下所有实例并 upsert（更新/新建/清理），
+// 供前端"更新实例"按钮。
+func (h *ArcheryHandler) SyncInstances(c *gin.Context) {
+	id, ok := pathID(c, "id")
+	if !ok {
+		return
+	}
+	list, err := h.uc.SyncInstances(c.Request.Context(), id)
+	if err != nil {
+		httputil.BadRequest(c, err.Error())
+		return
+	}
+	h.audit(c, biz.AuditArcheryUpdate, strconv.FormatInt(id, 10), map[string]any{"syncInstances": len(list)})
+	httputil.OK(c, gin.H{"list": list})
 }

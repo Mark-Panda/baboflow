@@ -11,4 +11,11 @@ var ProviderSet = wire.NewSet(
 	NewArcheryHandler,
 	NewComponentHandler,
 	NewRuleChainHandler,
+	NewAgentHandler,
+	NewSkillHandler,
+	NewMcpHandler,
+	NewBoardHandler,
+	NewAuditHandler,
+	NewCronHandler,
+	NewWsHub,
 )

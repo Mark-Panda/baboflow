@@ -9,11 +9,11 @@ RUN CGO_ENABLED=0 GOOS=linux GOPROXY=https://goproxy.cn,direct \
     go build -trimpath -ldflags="-s -w" -o /out/baboflow ./cmd/baboflow
 
 # ---- 前端构建 ----
-FROM node:20-alpine AS web
+FROM node:24-alpine AS web
 WORKDIR /web
-# 固定 pnpm@8（与本地 8.6.1 / lockfileVersion 6.1 对齐；corepack 的 pnpm11 在 node20 不兼容）
-RUN npm install -g pnpm@8
-COPY web/package.json web/pnpm-lock.yaml ./
+# 固定 pnpm@11（与本地 v11 / lockfileVersion 9.0 对齐）；node:24 满足 pnpm11 的 node>=22.13
+RUN npm install -g pnpm@11
+COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY web ./
 RUN pnpm run build   # 产物 dist/

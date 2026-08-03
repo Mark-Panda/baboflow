@@ -13,10 +13,10 @@ import (
 	"github.com/rulego/rulego/api/types"
 )
 
-// ClientFactory 抽象"按 archery_connection ID 取解密连接并构造 HTTP 客户端"。
+// ClientFactory 抽象"按 archery_instance ID 取其实例+所属连接的解密凭据并构造 HTTP 客户端"。
 // 与 AgentRunner 同一 DI 模式，进程启动时经 SetArcheryClientFactory 注入
-// （实现即 biz.ArcheryUsecase.NewClient），便于单测替换、避免 nodes 反向依赖 biz。
-type ClientFactory func(ctx context.Context, connectionID int64) (*archeryclient.Client, error)
+// （实现即 biz.ArcheryUsecase.NewClientForInstance），便于单测替换、避免 nodes 反向依赖 biz。
+type ClientFactory func(ctx context.Context, instanceID int64) (*archeryclient.Client, error)
 
 var (
 	clientFactory   ClientFactory

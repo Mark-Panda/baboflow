@@ -19,4 +19,14 @@ var ProviderSet = wire.NewSet(
 	NewArcheryUsecase,
 	NewComponentSync,
 	NewRuleChainUsecase,
+	NewAgentUsecase,
+	NewMcpUsecase,
+	NewBoardUsecase,
+	NewAuditUsecase,
+	NewCronUsecase,
+	NewSkillUsecase,
+	NewPlatformDeps,
+	NewPlatformTools,
+	// ChainRunner 由 *RuleChainUsecase 实现（RunPublished/RunPublishedAs）。
+	wire.Bind(new(ChainRunner), new(*RuleChainUsecase)),
 )

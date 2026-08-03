@@ -20,6 +20,11 @@ type PlatformDeps struct {
 	Skills        *SkillUsecase
 }
 
+// NewPlatformDeps 构造平台工具依赖（wire provider）。
+func NewPlatformDeps(compRepo ComponentRepo, chains *RuleChainUsecase, skills *SkillUsecase) *PlatformDeps {
+	return &PlatformDeps{ComponentRepo: compRepo, Chains: chains, Skills: skills}
+}
+
 // PlatformTools 把平台能力暴露为 Agent 工具：检索组件、校验/查询/创建规则链、创建 SKILL。
 type PlatformTools struct {
 	deps *PlatformDeps

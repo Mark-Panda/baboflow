@@ -31,10 +31,12 @@ const defaultTimeout = 30 * time.Second
 // ErrAuthFailed 表示 Archery 登录被拒绝（用户名/密码错误或非 Archery 实例）。
 var ErrAuthFailed = errors.New("archery 认证失败，请检查用户名/密码")
 
-// Config 一个 Archery 连接的配置（与 archery_connection 表对应，密码为解密后的明文）。
+// Config 一个 Archery 连接的配置（密码为解密后的明文）。
+// Instance 为该客户端绑定的 Archery 实例名：Query/Resource 需要；
+// ListInstances 面向整个站点、不依赖 Instance，故列实例时 Instance 可留空。
 type Config struct {
 	Endpoint string // Archery 基础地址，如 https://archery.example.com
-	Instance string // Archery 中配置的实例名
+	Instance string // Archery 实例名（Query/Resource 必填；ListInstances 可空）
 	Username string
 	Password string
 	Insecure bool   // 跳过 TLS 校验（不安全）
@@ -290,6 +292,47 @@ type listEnvelope struct {
 	Status int      `json:"status"`
 	Msg    string   `json:"msg"`
 	Data   []string `json:"data"`
+}
+
+// InstanceInfo 是 /group/user_all_instances/ 返回的单条实例。
+type InstanceInfo struct {
+	ID           int64  `json:"id"`
+	Type         string `json:"type"`          // 实例类型（如 master/slave， Archery 自定义）
+	DBType       string `json:"db_type"`       // mysql/postgresql/oracle/...
+	InstanceName string `json:"instance_name"` // Archery 中配置的实例名（Query/Resource 用）
+}
+
+type instancesEnvelope struct {
+	Status int            `json:"status"`
+	Msg    string         `json:"msg"`
+	Data   []InstanceInfo `json:"data"`
+}
+
+// ListInstances 列出当前登录用户可访问的全部 Archery 实例（按 tag_codes[]=can_read 过滤，
+// 即 SQL 查询页下拉所用接口）。面向整个站点、不依赖 Config.Instance。
+func (c *Client) ListInstances() ([]InstanceInfo, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	q := url.Values{}
+	q.Add("tag_codes[]", "can_read")
+	status, body, err := c.do(reqSpec{method: "GET", path: "/group/user_all_instances/", query: q, autoLogin: true})
+	if err != nil {
+		return nil, err
+	}
+	if status >= 500 {
+		return nil, fmt.Errorf("archery 服务端错误 HTTP %d", status)
+	}
+	if status >= 400 {
+		return nil, fmt.Errorf("archery HTTP %d: %s", status, snippet(body))
+	}
+	var env instancesEnvelope
+	if err := json.Unmarshal(body, &env); err != nil {
+		return nil, fmt.Errorf("解析 user_all_instances 响应: %w (body: %s)", err, snippet(body))
+	}
+	if env.Status != 0 {
+		return nil, &ServerError{Status: env.Status, Msg: env.Msg}
+	}
+	return env.Data, nil
 }
 
 // Query 对 (db, schema) 执行 SELECT。limit 对应 Archery 的 limit_num（服务端内部追加 LIMIT）。

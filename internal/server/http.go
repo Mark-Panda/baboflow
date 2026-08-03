@@ -141,6 +141,8 @@ func NewHTTPServer(
 			archery.PUT("/connections/:id", archeryH.UpdateConnection)
 			archery.DELETE("/connections/:id", archeryH.DeleteConnection)
 			archery.POST("/connections/:id/test", triggerLimiter, archeryH.TestConnection)
+			archery.GET("/connections/:id/instances", archeryH.ListInstances)
+			archery.POST("/connections/:id/sync-instances", triggerLimiter, archeryH.SyncInstances)
 		}
 
 		// 组件

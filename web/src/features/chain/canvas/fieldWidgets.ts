@@ -9,7 +9,7 @@ export type RelationApi =
   | 'llmProviders' // LLM 接入点
   | 'llmModels' // LLM 模型（两级：依赖 provider）
   | 'mcpServers' // MCP 服务
-  | 'archeryConnections' // Archery 连接
+  | 'archeryInstances' // Archery 实例（跨连接平铺）
   | 'skills'; // 技能
 
 export interface RelationRef {
@@ -47,13 +47,13 @@ const RELATION_MAP: Record<string, Record<string, RelationRef>> = {
       dependsOn: 'llmProviderId',
     },
   },
-  // Archery 查询节点：connectionId 引用一条 Archery 连接（存 id）
+  // Archery 查询节点：instanceId 引用一个已同步的 Archery 实例（存 id）
   archeryQuery: {
-    connectionId: { api: 'archeryConnections', valueKey: 'id', labelKey: 'name' },
+    instanceId: { api: 'archeryInstances', valueKey: 'id', labelKey: 'instanceName' },
   },
-  // Archery schema 浏览节点：connectionId 同上
+  // Archery schema 浏览节点：instanceId 同上
   archerySchema: {
-    connectionId: { api: 'archeryConnections', valueKey: 'id', labelKey: 'name' },
+    instanceId: { api: 'archeryInstances', valueKey: 'id', labelKey: 'instanceName' },
   },
 };
 
