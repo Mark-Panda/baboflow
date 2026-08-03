@@ -341,11 +341,13 @@
   flex-direction: column;
   gap: 8px;
 }
-/* 每条规则两行：上=连接符+运算符+删除，下=左值+右值 */
+/* 每条规则两行：行1=连接符+运算符(占满整行,始终完整可见)+删除；行2=左值+右值 各半。
+   两行都只占面板宽度，不再单行硬塞 → 多条件不横向溢出。 */
 .bf-switch-rule {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
+  min-width: 0;
   padding: 6px;
   border: 1px solid #eef0f5;
   border-radius: 6px;
@@ -354,29 +356,38 @@
 .bf-switch-rule-top {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
+  min-width: 0;
+}
+.bf-switch-rule-io {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
 }
 .bf-switch-join {
   flex: none;
-  width: 56px;
+  width: 44px;
   text-align: center;
   font-size: 11px;
   color: #6b7280;
 }
 .bf-switch-join-first {
   color: #a2a9bd;
-  padding-left: 4px;
+  padding-left: 2px;
   text-align: left;
 }
+/* 运算符下拉：占满行1剩余宽度、可收缩，任何面板宽度下都完整可见 */
 .bf-switch-op {
-  flex: 1;
+  flex: 1 1 0;
   min-width: 0;
 }
-.bf-switch-rule-io {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.bf-switch-op .ant-select-selector {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+/* 左值/右值输入框：平分行2，可收缩 */
 .bf-switch-left {
   flex: 1 1 0;
   min-width: 0;
@@ -388,6 +399,9 @@
   min-width: 0;
   font-family: monospace;
   font-size: 12px;
+}
+.bf-switch-rule .ant-btn {
+  flex: none;
 }
 .bf-switch-else {
   display: flex;
