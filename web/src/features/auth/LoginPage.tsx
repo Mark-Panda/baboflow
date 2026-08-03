@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Button, Card, Form, Input, App } from 'antd';
+import { Button, Card, Divider, Form, Input, App } from 'antd';
 import { LockOutlined, UserOutlined } from '@ant-design/icons';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
-import { authApi } from '@/api/auth';
+import { authApi, feishuLoginUrl } from '@/api/auth';
 import { useAuthStore } from '@/stores/authStore';
 
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const location = useLocation() as { state?: { from?: { pathname?: string } } };
+  const [searchParams] = useSearchParams();
   const { message } = App.useApp();
   const setUser = useAuthStore((s) => s.setUser);
   const user = useAuthStore((s) => s.user);
@@ -17,6 +18,12 @@ export default function LoginPage() {
   useEffect(() => {
     if (user) navigate('/', { replace: true });
   }, [user, navigate]);
+
+  // 飞书回调失败时后端 302 到 /login?err=...
+  useEffect(() => {
+    const err = searchParams.get('err');
+    if (err) message.error(`飞书登录失败：${err}`);
+  }, [searchParams, message]);
 
   const onFinish = async (values: { username: string; password: string }) => {
     setLoading(true);
@@ -69,6 +76,12 @@ export default function LoginPage() {
           </Form.Item>
           <Button type="primary" htmlType="submit" block loading={loading}>
             登 录
+          </Button>
+          <Divider plain style={{ margin: '20px 0 12px', color: '#bbb', fontSize: 12 }}>
+            或
+          </Divider>
+          <Button block onClick={() => (window.location.href = feishuLoginUrl)}>
+            飞书登录
           </Button>
         </Form>
       </Card>

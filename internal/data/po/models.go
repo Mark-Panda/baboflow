@@ -13,9 +13,14 @@ import (
 type AdminUser struct {
 	ID           int64      `gorm:"primaryKey"`
 	Username     string     `gorm:"size:64;uniqueIndex;not null"`
-	PasswordHash string     `gorm:"size:255;not null"`
+	PasswordHash string     `gorm:"size:255;not null;default:''"` // 飞书用户无密码（空串占位，无法用密码登录）
 	DisplayName  string     `gorm:"size:64;not null;default:管理员"`
 	MustChangePwd bool      `gorm:"not null;default:false"` // 首次登录强制改密
+	// 飞书 OAuth 登录标识。密码用户为 NULL（非空串），避免唯一索引在空串上冲突。
+	FeishuOpenID  *string `gorm:"size:64;uniqueIndex"`  // 飞书 open_id（唯一）
+	FeishuUnionID string  `gorm:"size:64;not null;default:''"`
+	Avatar        string  `gorm:"size:512;not null;default:''"` // 头像 URL
+	Email         string  `gorm:"size:128;not null;default:''"`
 	LastLoginAt  *time.Time
 	CreatedAt    time.Time
 	UpdatedAt    time.Time

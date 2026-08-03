@@ -15,6 +15,7 @@ import (
 var ProviderSet = wire.NewSet(
 	rulegokit.NewManager,
 	NewAuthUsecase,
+	NewFeishuUsecase,
 	NewLLMUsecase,
 	NewArcheryUsecase,
 	NewComponentSync,

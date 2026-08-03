@@ -82,6 +82,13 @@ type stubAuthRepo struct {
 func (s *stubAuthRepo) FindUserByUsername(ctx context.Context, u string) (*po.AdminUser, error) {
 	return nil, errors.New("not implemented")
 }
+func (s *stubAuthRepo) FindUserByFeishuOpenID(ctx context.Context, openid string) (*po.AdminUser, error) {
+	return nil, errors.New("not implemented")
+}
+func (s *stubAuthRepo) CreateUser(ctx context.Context, u *po.AdminUser) error { return nil }
+func (s *stubAuthRepo) UpdateFeishuProfile(ctx context.Context, id int64, dn, av, em, un string) error {
+	return nil
+}
 func (s *stubAuthRepo) FindUserByID(ctx context.Context, id int64) (*po.AdminUser, error) {
 	if u, ok := s.users[id]; ok {
 		return u, nil

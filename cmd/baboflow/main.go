@@ -44,6 +44,7 @@ type App struct {
 
 	// 各 handler：仅用于注入审计器。
 	AuthH    *service.AuthHandler
+	FeishuH  *service.FeishuHandler
 	LLMH     *service.LLMHandler
 	ArcheryH *service.ArcheryHandler
 	ChainH   *service.RuleChainHandler
@@ -69,6 +70,7 @@ func newApp(
 	platformTools *biz.PlatformTools,
 	tracer *agentkit.Tracer,
 	authH *service.AuthHandler,
+	feishuH *service.FeishuHandler,
 	llmH *service.LLMHandler,
 	archeryH *service.ArcheryHandler,
 	chainH *service.RuleChainHandler,
@@ -83,6 +85,7 @@ func newApp(
 		AgentManager: agentManager, Eng: eng, CompSync: compSync, CompRepo: compRepo,
 		PlatformTools: platformTools, Tracer: tracer,
 		AuthH: authH, LLMH: llmH, ArcheryH: archeryH, ChainH: chainH,
+		FeishuH: feishuH,
 		SkillH: skillH, McpH: mcpH, BoardH: boardH,
 	}
 }
@@ -169,6 +172,7 @@ func injectRuntime(app *App, helper *log.Helper) {
 
 	// 审计器（均 nil 守卫，可选）。
 	app.AuthH.SetAuditor(app.AuditUC)
+	app.FeishuH.SetAuditor(app.AuditUC)
 	app.LLMH.SetAuditor(app.AuditUC)
 	app.ArcheryH.SetAuditor(app.AuditUC)
 	app.ChainH.SetAuditor(app.AuditUC)

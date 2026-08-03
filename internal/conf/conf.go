@@ -32,6 +32,11 @@ type Config struct {
 	AdminInitPassword string // ADMIN_INIT_PASSWORD: 首次启动 admin 初始密码
 
 	MCPAuthToken string // MCP_AUTH_TOKEN: /mcp SSE 端点的 Bearer 令牌（外部 MCP 客户端用；空=仅接受已登录会话）
+
+	// 飞书自建应用 OAuth 登录（直连 open.feishu.cn）。三者缺一则飞书登录不可用（密码登录不受影响）。
+	FeishuAppID       string // FEISHU_APP_ID
+	FeishuAppSecret   string // FEISHU_APP_SECRET（仅 env 注入，不入库、不打日志）
+	FeishuRedirectURI string // FEISHU_REDIRECT_URI: 与飞书后台配置的重定向 URL 一致，如 https://<host>/api/v1/auth/feishu/callback
 }
 
 // Load 从环境变量读取配置（.env 由 main 先加载进环境）。
@@ -61,6 +66,10 @@ func Load() *Config {
 		AdminInitPassword: getEnv("ADMIN_INIT_PASSWORD", "admin123"),
 
 		MCPAuthToken: getEnv("MCP_AUTH_TOKEN", ""),
+
+		FeishuAppID:       getEnv("FEISHU_APP_ID", ""),
+		FeishuAppSecret:   getEnv("FEISHU_APP_SECRET", ""),
+		FeishuRedirectURI: getEnv("FEISHU_REDIRECT_URI", ""),
 	}
 }
 

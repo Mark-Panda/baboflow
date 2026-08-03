@@ -23,6 +23,7 @@ func NewHTTPServer(
 	c *conf.Config,
 	auth *biz.AuthUsecase,
 	authH *service.AuthHandler,
+	feishuH *service.FeishuHandler,
 	llmH *service.LLMHandler,
 	archeryH *service.ArcheryHandler,
 	compH *service.ComponentHandler,
@@ -103,6 +104,9 @@ func NewHTTPServer(
 	authG := api.Group("/auth")
 	{
 		authG.POST("/login", loginLimiter, authH.Login)
+		// 飞书 OAuth 登录（公开）：入口 302 到飞书授权页，回调发证后 302 回前端。
+		authG.GET("/feishu/login", feishuH.Login)
+		authG.GET("/feishu/callback", feishuH.Callback)
 	}
 	// 需登录的 auth
 	authAuthed := api.Group("/auth", service.AuthMiddleware(auth))

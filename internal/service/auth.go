@@ -59,7 +59,15 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 
 func (h *AuthHandler) Me(c *gin.Context) {
 	uid := CurrentUserID(c)
-	httputil.OK(c, gin.H{"userId": uid, "username": "admin", "displayName": "管理员"})
+	user, err := h.auth.Me(c.Request.Context(), uid)
+	if err != nil {
+		httputil.Unauthorized(c, "会话无效")
+		return
+	}
+	httputil.OK(c, gin.H{
+		"userId": user.ID, "username": user.Username,
+		"displayName": user.DisplayName, "avatar": user.Avatar, "email": user.Email,
+	})
 }
 
 type changePwdReq struct {

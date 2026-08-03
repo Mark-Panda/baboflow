@@ -26,6 +26,9 @@ const (
 type AuthRepo interface {
 	FindUserByUsername(ctx context.Context, username string) (*po.AdminUser, error)
 	FindUserByID(ctx context.Context, id int64) (*po.AdminUser, error)
+	FindUserByFeishuOpenID(ctx context.Context, openid string) (*po.AdminUser, error)
+	CreateUser(ctx context.Context, u *po.AdminUser) error
+	UpdateFeishuProfile(ctx context.Context, id int64, displayName, avatar, email, unionID string) error
 	UpdateUserPassword(ctx context.Context, id int64, hash string, mustChange bool) error
 	TouchLastLogin(ctx context.Context, id int64) error
 
@@ -60,6 +63,19 @@ func (uc *AuthUsecase) Login(ctx context.Context, username, password, ip, ua str
 	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) != nil {
 		return nil, ErrBadCredential
 	}
+	sid, err := issueSession(ctx, uc.repo, user, ip, ua)
+	if err != nil {
+		return nil, err
+	}
+	return &LoginResult{
+		UserID: user.ID, Username: user.Username, DisplayName: user.DisplayName,
+		MustChangePwd: user.MustChangePwd, SessionID: sid,
+	}, nil
+}
+
+// issueSession 为指定用户创建会话并记录登录时间，返回 session ID。
+// 密码登录（Login）与飞书登录（FeishuUsecase.LoginByCode）共用，保证发证字节一致。
+func issueSession(ctx context.Context, repo AuthRepo, user *po.AdminUser, ip, ua string) (string, error) {
 	sid := newSessionID()
 	sess := &po.Session{
 		ID:        sid,
@@ -68,14 +84,11 @@ func (uc *AuthUsecase) Login(ctx context.Context, username, password, ip, ua str
 		UserAgent: ua,
 		ExpiresAt: time.Now().Add(sessionTTL),
 	}
-	if err := uc.repo.CreateSession(ctx, sess); err != nil {
-		return nil, err
+	if err := repo.CreateSession(ctx, sess); err != nil {
+		return "", err
 	}
-	_ = uc.repo.TouchLastLogin(ctx, user.ID)
-	return &LoginResult{
-		UserID: user.ID, Username: user.Username, DisplayName: user.DisplayName,
-		MustChangePwd: user.MustChangePwd, SessionID: sid,
-	}, nil
+	_ = repo.TouchLastLogin(ctx, user.ID)
+	return sid, nil
 }
 
 func (uc *AuthUsecase) Logout(ctx context.Context, sid string) error {
@@ -105,6 +118,11 @@ func (uc *AuthUsecase) Validate(ctx context.Context, sid string) (*po.AdminUser,
 		return nil, ErrSessionExpired
 	}
 	return user, nil
+}
+
+// Me 按用户 ID 取当前登录用户（供 /auth/me 返回真实昵称/头像/邮箱，而非硬编码）。
+func (uc *AuthUsecase) Me(ctx context.Context, userID int64) (*po.AdminUser, error) {
+	return uc.repo.FindUserByID(ctx, userID)
 }
 
 func (uc *AuthUsecase) ChangePassword(ctx context.Context, userID int64, oldPwd, newPwd string) error {

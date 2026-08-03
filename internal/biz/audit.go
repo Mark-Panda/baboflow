@@ -51,6 +51,7 @@ func (uc *AuditUsecase) Record(ctx context.Context, userID *int64, action, targe
 const (
 	AuditLogin          = "auth.login"
 	AuditLoginFailed    = "auth.login_failed"
+	AuditLoginFeishu    = "auth.login_feishu"
 	AuditLogout         = "auth.logout"
 	AuditChangePassword = "auth.change_password"
 

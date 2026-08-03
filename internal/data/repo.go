@@ -33,6 +33,29 @@ func (r *authRepo) FindUserByID(ctx context.Context, id int64) (*po.AdminUser, e
 	return &u, nil
 }
 
+// FindUserByFeishuOpenID 按飞书 open_id 查用户；不存在返回 gorm.ErrRecordNotFound。
+func (r *authRepo) FindUserByFeishuOpenID(ctx context.Context, openid string) (*po.AdminUser, error) {
+	var u po.AdminUser
+	if err := r.db.WithContext(ctx).Where("feishu_open_id = ?", openid).First(&u).Error; err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
+// CreateUser 新建用户（飞书首登自动建号；密码登录的初始 admin 由 seed 创建）。
+func (r *authRepo) CreateUser(ctx context.Context, u *po.AdminUser) error {
+	return r.db.WithContext(ctx).Create(u).Error
+}
+
+// UpdateFeishuProfile 回写飞书资料（昵称/头像/邮箱/union_id），保持与飞书侧一致。
+func (r *authRepo) UpdateFeishuProfile(ctx context.Context, id int64, displayName, avatar, email, unionID string) error {
+	return r.db.WithContext(ctx).Model(&po.AdminUser{}).Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"display_name": displayName, "avatar": avatar,
+			"email": email, "feishu_union_id": unionID,
+		}).Error
+}
+
 func (r *authRepo) UpdateUserPassword(ctx context.Context, id int64, hash string, mustChange bool) error {
 	return r.db.WithContext(ctx).Model(&po.AdminUser{}).Where("id = ?", id).
 		Updates(map[string]interface{}{"password_hash": hash, "must_change_pwd": mustChange}).Error

@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Dropdown, Layout, Menu, Modal, Form, Input, App } from 'antd';
+import { Dropdown, Layout, Menu, Modal, Form, Input, App, Avatar } from 'antd';
 import {
   DashboardOutlined,
   DeploymentUnitOutlined,
@@ -106,7 +106,10 @@ export default function MainLayout() {
                 ],
               }}
             >
-              <span style={{ cursor: 'pointer', color: '#333' }}>
+              <span style={{ cursor: 'pointer', color: '#333', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <Avatar size={26} src={user?.avatar} style={{ background: '#4f8cff', flexShrink: 0 }}>
+                  {(user?.displayName || user?.username || '?').slice(0, 1).toUpperCase()}
+                </Avatar>
                 {user?.displayName || user?.username} <DownOutlined style={{ fontSize: 10 }} />
               </span>
             </Dropdown>

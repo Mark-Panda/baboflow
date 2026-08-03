@@ -7,6 +7,7 @@ import (
 // ProviderSet service 层依赖。
 var ProviderSet = wire.NewSet(
 	NewAuthHandler,
+	NewFeishuHandler,
 	NewLLMHandler,
 	NewArcheryHandler,
 	NewComponentHandler,

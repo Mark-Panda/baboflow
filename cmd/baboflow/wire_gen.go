@@ -27,6 +27,8 @@ func wireApp(c *conf.Config) (*App, func(), error) {
 	authRepo := data.NewAuthRepo(db)
 	authUsecase := biz.NewAuthUsecase(authRepo)
 	authHandler := service.NewAuthHandler(authUsecase)
+	feishuUsecase := biz.NewFeishuUsecase(authRepo, c)
+	feishuHandler := service.NewFeishuHandler(feishuUsecase)
 	llmRepo := data.NewLLMRepo(db)
 	llmUsecase := biz.NewLLMUsecase(llmRepo, c)
 	llmHandler := service.NewLLMHandler(llmUsecase)
@@ -71,10 +73,10 @@ func wireApp(c *conf.Config) (*App, func(), error) {
 	cronUsecase := biz.NewCronUsecase(cronDataRepo, ruleChainUsecase)
 	cronHandler := service.NewCronHandler(cronUsecase)
 	wsHub := service.NewWsHub(agentUsecase, authUsecase)
-	httpServer := server.NewHTTPServer(c, authUsecase, authHandler, llmHandler, archeryHandler, componentHandler, ruleChainHandler, agentHandler, skillHandler, mcpHandler, boardHandler, auditHandler, cronHandler, wsHub, mcpUsecase, db)
+	httpServer := server.NewHTTPServer(c, authUsecase, authHandler, feishuHandler, llmHandler, archeryHandler, componentHandler, ruleChainHandler, agentHandler, skillHandler, mcpHandler, boardHandler, auditHandler, cronHandler, wsHub, mcpUsecase, db)
 	platformDeps := biz.NewPlatformDeps(componentRepo, ruleChainUsecase, skillUsecase)
 	platformTools := biz.NewPlatformTools(platformDeps)
-	app := newApp(httpServer, c, ruleChainUsecase, mcpUsecase, cronUsecase, boardUsecase, skillUsecase, archeryUsecase, auditUsecase, agentkitManager, manager, componentSync, componentRepo, platformTools, tracer, authHandler, llmHandler, archeryHandler, ruleChainHandler, skillHandler, mcpHandler, boardHandler)
+	app := newApp(httpServer, c, ruleChainUsecase, mcpUsecase, cronUsecase, boardUsecase, skillUsecase, archeryUsecase, auditUsecase, agentkitManager, manager, componentSync, componentRepo, platformTools, tracer, authHandler, feishuHandler, llmHandler, archeryHandler, ruleChainHandler, skillHandler, mcpHandler, boardHandler)
 	return app, func() {
 		cleanup()
 	}, nil
