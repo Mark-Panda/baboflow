@@ -1,0 +1,59 @@
+# baboflow 默认配置文件。
+#
+# 解析优先级（高 → 低）：
+#   1. 环境变量 / .env（main 启动时经 godotenv 注入环境）
+#   2. 本文件 config/default.yaml
+#   3. 代码内置默认值
+#
+# 说明：
+#   - 环境变量优先；仅当环境变量为空时才读本文件对应项；本文件也没有（或为占位空值）时回退到代码默认值。
+#   - 本文件会被提交进仓库并嵌入二进制，请勿写入任何真实密钥/密码（保持空或占位）。
+#     敏感项（BABO_SECRET / 各类 *_SECRET_KEY / FEISHU_APP_SECRET / ADMIN_INIT_PASSWORD 等）
+#     建议一律用环境变量或 .env 注入，不要写进本文件。
+
+# HTTP/WS 监听地址
+httpAddr: ":8000"
+# gRPC 监听地址
+grpcAddr: ":9000"
+
+# PostgreSQL DSN
+databaseDsn: "host=127.0.0.1 user=babo password=babo dbname=baboflow port=5432 sslmode=disable"
+
+# 32 字节密钥，用于 apiKey AES-GCM 加密。生产务必用环境变量覆盖，勿写入本文件。
+secret: ""
+
+# Langfuse 观测（可空，空=不启用）
+langfuseHost: ""
+langfusePublicKey: ""
+langfuseSecretKey: ""
+
+# Agent 内置工具沙箱目录
+workspace: "./workspace"
+
+# 规则链执行并发
+executorWorkers: 8
+# bash 命令白名单（YAML 列表或逗号分隔字符串均可），空=黑名单模式
+bashAllowlist: []
+
+# 向量维度
+embeddingDim: 1536
+# 生成向量所用 llm_model.id
+embeddingModelId: 0
+
+# 组件 SKILL 是否用 LLM 润色
+componentSkillLlm: false
+
+# 首次启动 admin 初始密码（仅初始化时生效；生产建议用环境变量覆盖）
+adminInitPassword: ""
+
+# /mcp SSE 端点 Bearer 令牌（外部 MCP 客户端无 Cookie 时使用；空=仅接受已登录会话）
+# 该端点会执行已发布规则链，生产环境强烈建议设置一个强随机值（用环境变量注入）。
+mcpAuthToken: ""
+
+# ---- 飞书自建应用 OAuth 登录（直连 open.feishu.cn；三者缺一则飞书登录不可用）----
+# 在飞书开放平台给 baboflow 建自建应用，开通获取用户信息权限，
+# 并把重定向 URL 配置为下面的 feishuRedirectUri。appSecret 建议用环境变量注入。
+feishuAppId: ""
+feishuAppSecret: ""
+# 与飞书后台配置的重定向 URL 完全一致，如 https://baboflow.example.com/api/v1/auth/feishu/callback
+feishuRedirectUri: ""
