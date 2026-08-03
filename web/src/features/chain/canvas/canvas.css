@@ -71,31 +71,6 @@
   color: #9aa0b4;
   font-family: monospace;
 }
-.rule-node .rn-output {
-  position: absolute;
-  right: -6px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  transform: translateY(-50%);
-  pointer-events: none;
-}
-.rule-node .rn-output-label {
-  max-width: 72px;
-  overflow: hidden;
-  color: #70788e;
-  font-size: 10px;
-  line-height: 14px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.rule-node .rn-output .react-flow__handle {
-  position: relative;
-  top: auto;
-  right: auto;
-  transform: none;
-  pointer-events: all;
-}
 .rule-node .rn-debug {
   position: absolute;
   top: -9px;
@@ -218,6 +193,22 @@
 .react-flow__edge-text {
   font-size: 10px;
   fill: #6b7280;
+}
+/* 可点的连线关系标签（点击切换连接类型） */
+.react-flow__edge-text.bf-edge-label {
+  cursor: pointer;
+  padding: 1px 6px;
+  color: #6b7280;
+  background: #fff;
+  border: 1px solid #e2e5ee;
+  border-radius: 5px;
+}
+.react-flow__edge-text.bf-edge-label:hover {
+  color: #4f6ef7;
+  border-color: #4f6ef7;
+}
+.react-flow__edge.selected .react-flow__edge-text.bf-edge-label {
+  border-color: #4f6ef7;
 }
 
 /* 面板 */

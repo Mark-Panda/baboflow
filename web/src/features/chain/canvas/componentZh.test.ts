@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { componentZhName, componentZhDesc, fieldZh, COMPONENT_ZH } from './componentZh';
+import { componentZhName, componentZhDesc, fieldZh, relationZhName, COMPONENT_ZH } from './componentZh';
 
 describe('componentZh 中文映射', () => {
   it('已知组件返回中文名', () => {
@@ -35,5 +35,20 @@ describe('componentZh 中文映射', () => {
     Object.values(COMPONENT_ZH).forEach((c) => {
       expect(c.name.trim().length).toBeGreaterThan(0);
     });
+  });
+});
+
+describe('relationZhName 连接类型中文映射', () => {
+  it('五类常规连接类型映射为中文', () => {
+    expect(relationZhName('Success')).toBe('成功');
+    expect(relationZhName('Failure')).toBe('失败');
+    expect(relationZhName('True')).toBe('真');
+    expect(relationZhName('False')).toBe('假');
+    expect(relationZhName('Default')).toBe('默认');
+  });
+
+  it('未映射的连接类型（switch 自定义分支等）回退为原值', () => {
+    expect(relationZhName('Case1')).toBe('Case1');
+    expect(relationZhName('LegacyBranch')).toBe('LegacyBranch');
   });
 });

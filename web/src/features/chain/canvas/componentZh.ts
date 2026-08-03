@@ -10,6 +10,21 @@ export interface ComponentZh {
   fields?: Record<string, FieldZh>; // 按字段名映射中文 label/desc
 }
 
+// 连接类型（relationType）-> 中文显示映射（纯展示层）。
+// DSL connection.type 仍写英文原值；这里只影响画布连线标签、关系下拉、调试面板的显示。
+const RELATION_ZH: Record<string, string> = {
+  Success: "成功",
+  Failure: "失败",
+  True: "真",
+  False: "假",
+  Default: "默认",
+};
+
+// 连接类型中文名：命中映射返回中文，否则（switch 自定义分支等）返回原值。
+export function relationZhName(relationType: string): string {
+  return RELATION_ZH[relationType] ?? relationType;
+}
+
 const COMMON_FIELD_ZH: Record<string, FieldZh> = {
   delayMs: { label: "延迟时间", desc: "消息等待时间，单位为毫秒" },
   timeoutMs: { label: "超时时间", desc: "请求或执行的超时时间，单位为毫秒" },

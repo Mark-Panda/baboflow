@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { routeAround, type Pt, type Rect } from './routePath';
+import { labelAnchorNearSource, routeAround, type Pt, type Rect } from './routePath';
 
 function rect(x: number, y: number, width: number, height: number): Rect {
   return { x, y, width, height };
@@ -83,5 +83,51 @@ describe('routeAround', () => {
     const wall = rect(50, -50, 100, 40);
     const pts = routeAround(s, t, [wall]);
     expect(hitsRect(pts, wall, 18)).toBe(false);
+  });
+});
+
+describe('labelAnchorNearSource', () => {
+  it('水平首段：锚在源点右侧 offset 处', () => {
+    const anchor = labelAnchorNearSource([{ x: 0, y: 100 }, { x: 300, y: 100 }], 28);
+    expect(anchor).toEqual({ x: 28, y: 100 });
+  });
+
+  it('H-V-H 首段（先水平）：锚在源→第一拐点方向，不压拐点', () => {
+    // 源 (0,0) → 第一拐点 (150,0)（midX），首段长 150
+    const anchor = labelAnchorNearSource(
+      [{ x: 0, y: 0 }, { x: 150, y: 0 }, { x: 150, y: 200 }, { x: 300, y: 200 }],
+      28,
+    );
+    expect(anchor).toEqual({ x: 28, y: 0 });
+  });
+
+  it('首段过短（< 2*offset）时取首段中点', () => {
+    // 源 (0,0) → 第一拐点 (20,0)，首段长 20 < 56 → 取中点 (10,0)
+    const anchor = labelAnchorNearSource(
+      [{ x: 0, y: 0 }, { x: 20, y: 0 }, { x: 20, y: 100 }, { x: 300, y: 100 }],
+      28,
+    );
+    expect(anchor).toEqual({ x: 10, y: 0 });
+  });
+
+  it('源在目标右侧（连线向左）：锚点也向左偏移', () => {
+    const anchor = labelAnchorNearSource([{ x: 300, y: 50 }, { x: 0, y: 50 }], 28);
+    expect(anchor).toEqual({ x: 272, y: 50 });
+  });
+
+  it('汇入同一目标的多条连线：各自锚点不同（不重叠）', () => {
+    const t = { x: 400, y: 200 };
+    const a = routeAround({ x: 0, y: 0 }, t, []);
+    const b = routeAround({ x: 0, y: 400 }, t, []);
+    const anchorA = labelAnchorNearSource(a);
+    const anchorB = labelAnchorNearSource(b);
+    // 两条线源端高度不同，锚点应分别贴近各自源端
+    expect(anchorA).not.toEqual(anchorB);
+    expect(anchorA.y).toBeCloseTo(a[0].y);
+    expect(anchorB.y).toBeCloseTo(b[0].y);
+  });
+
+  it('仅单点/空拐点时退回源点', () => {
+    expect(labelAnchorNearSource([{ x: 5, y: 5 }])).toEqual({ x: 5, y: 5 });
   });
 });

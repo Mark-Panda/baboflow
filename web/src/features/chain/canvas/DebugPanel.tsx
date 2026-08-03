@@ -11,6 +11,7 @@ import {
 
 import { NodeTrace } from '@/api/chain';
 import CodeField from '@/components/CodeField';
+import { relationZhName } from './componentZh';
 
 export interface DebugPanelProps {
   running: boolean;
@@ -197,7 +198,7 @@ function TraceRow({
           )}
           {(t.relationType || t.flowType) && (
             <Tag color={failed ? 'error' : 'default'} style={{ marginRight: 0 }}>
-              {t.relationType || t.flowType}
+              {t.relationType ? relationZhName(t.relationType) : t.flowType}
             </Tag>
           )}
           <Tooltip title="在画布中定位">

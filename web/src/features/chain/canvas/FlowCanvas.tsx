@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import {
   ReactFlow, Background, Controls, MiniMap, addEdge, reconnectEdge,
   applyNodeChanges, applyEdgeChanges, useReactFlow,
@@ -14,6 +14,8 @@ import { ComponentMeta } from '@/api/component';
 import { DND_MIME } from './ComponentPalette';
 import {
   EDGE_TYPE,
+  availableRelationsForEdge,
+  defaultRelationFor,
   genNodeId,
   isContainerType,
   relationClassName,
@@ -65,7 +67,8 @@ export default function FlowCanvas(props: FlowCanvasProps) {
         message.warning('不允许自环连线');
         return;
       }
-      const relationType = conn.sourceHandle ?? 'Success';
+      // 节点为单一输出端，conn.sourceHandle 为空；连接类型取默认（Success 或第一个可用），
+      // 之后可在连线上点击切换（见 AvoidEdge）。
       const sourceNode = nodes.find((node) => node.id === conn.source);
       const sourceData = sourceNode?.data as RuleNodeData | undefined;
       const relationTypes = sourceData
@@ -76,6 +79,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
             sourceData.relationTypes,
           )
         : [];
+      const relationType = defaultRelationFor(relationTypes);
       if (relationTypes?.length && !relationTypes.includes(relationType)) {
         message.warning('该输出关系不属于当前组件');
         return;
@@ -131,7 +135,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
         message.warning('两节点间该关系已存在连线');
         return;
       }
-      const next = reconnectEdge(oldEdge, { ...conn, sourceHandle: relationType }, edges)
+      const next = reconnectEdge(oldEdge, { ...conn }, edges)
         .map((e) => e.id === oldEdge.id
           ? {
               ...e,
@@ -144,6 +148,53 @@ export default function FlowCanvas(props: FlowCanvasProps) {
       props.onEdgesChange(next);
     },
     [edges, message, nodes, props]
+  );
+
+  // 切换某条连线的连接类型：只更新 label/data.relationType/className，保持边 id 稳定，
+  // 避免破坏 xyflow reconciliation 与选中态。受控画布下必须经 props.onEdgesChange 写回。
+  const onChangeEdgeRelation = useCallback(
+    (edgeId: string, next: string) => {
+      props.onEdgesChange(
+        edges.map((e) => e.id === edgeId
+          ? {
+              ...e,
+              label: next,
+              data: { ...e.data, relationType: next },
+              className: relationClassName(next),
+            }
+          : e)
+      );
+    },
+    [edges, props]
+  );
+
+  // 注入每条边的「关系下拉」所需数据（可用选项 + 切换回调），供 AvoidEdge 渲染交互标签。
+  // 选项按同一 (source,target) 其他连线已占用的关系去重，避免重复三元组。
+  const rfEdges = useMemo(
+    () => edges.map((edge) => {
+      const sourceData = nodes.find((node) => node.id === edge.source)?.data as
+        | RuleNodeData
+        | undefined;
+      if (!sourceData) return edge;
+      const allRelations = relationTypesForNode(
+        sourceData.ruleType,
+        sourceData.configuration,
+        props.components,
+        sourceData.relationTypes,
+      );
+      const siblingUsed = edges
+        .filter((o) => o.id !== edge.id && o.source === edge.source && o.target === edge.target)
+        .map((o) => edgeRelationType(o));
+      return {
+        ...edge,
+        data: {
+          ...edge.data,
+          __relationOptions: availableRelationsForEdge(allRelations, siblingUsed),
+          __onChangeRelation: onChangeEdgeRelation,
+        },
+      };
+    }),
+    [edges, nodes, props.components, onChangeEdgeRelation]
   );
 
   const onDrop = useCallback(
@@ -181,7 +232,7 @@ export default function FlowCanvas(props: FlowCanvasProps) {
     >
       <ReactFlow
         nodes={nodes.map((n) => ({ ...n, data: { ...n.data, __onEnterSub: props.onEnterSub } }))}
-        edges={edges}
+        edges={rfEdges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         defaultEdgeOptions={{ type: EDGE_TYPE }}

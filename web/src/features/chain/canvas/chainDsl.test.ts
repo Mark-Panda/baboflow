@@ -3,6 +3,8 @@ import {
   dslToFlow,
   flowToDsl,
   EDGE_TYPE,
+  availableRelationsForEdge,
+  defaultRelationFor,
   isContainerType,
   relationTypesForNode,
   type DslChain,
@@ -57,7 +59,8 @@ describe('dslToFlow', () => {
     expect(edges[0].target).toBe('n2');
     expect(edges[0].type).toBe(EDGE_TYPE);
     expect(edges[0].data?.relationType).toBe('Success');
-    expect(edges[0].sourceHandle).toBe('Success');
+    // 节点为单一无 id 输出端，不再写 sourceHandle；关系类型只在 data.relationType
+    expect(edges[0].sourceHandle).toBeUndefined();
   });
 
   it('从组件 schema 恢复多个输出关系', () => {
@@ -106,18 +109,50 @@ describe('flowToDsl', () => {
         id: 'n1->loop:True',
         source: 'n1',
         target: 'loop',
-        sourceHandle: 'True',
         data: { relationType: 'True' },
       },
       {
         id: 'n1->loop:False',
         source: 'n1',
         target: 'loop',
-        sourceHandle: 'False',
         data: { relationType: 'False' },
       },
     ]);
     expect(dsl.metadata?.connections?.map((connection) => connection.type))
       .toEqual(['True', 'False']);
+  });
+});
+
+describe('defaultRelationFor', () => {
+  it('优先返回 Success', () => {
+    expect(defaultRelationFor(['Success', 'Failure'])).toBe('Success');
+    expect(defaultRelationFor(['Failure', 'Success'])).toBe('Success');
+  });
+
+  it('无 Success 时取第一个可用关系（如 switch）', () => {
+    expect(defaultRelationFor(['Case1', 'Default', 'Failure'])).toBe('Case1');
+    expect(defaultRelationFor(['True', 'False', 'Failure'])).toBe('True');
+  });
+
+  it('空列表兜底 Success', () => {
+    expect(defaultRelationFor([])).toBe('Success');
+  });
+});
+
+describe('availableRelationsForEdge', () => {
+  it('排除同 source+target 其他连线已占用的关系', () => {
+    expect(availableRelationsForEdge(['Success', 'Failure'], ['Success']))
+      .toEqual(['Failure']);
+  });
+
+  it('本边当前关系不在 siblingUsed 中，保持可选', () => {
+    // 第二条边当前为 Failure；第一条占用 Success → 本边可选不含 Success 但含 Failure
+    expect(availableRelationsForEdge(['Success', 'Failure'], ['Success']))
+      .toContain('Failure');
+  });
+
+  it('无占用时返回全部', () => {
+    expect(availableRelationsForEdge(['Success', 'Failure'], []))
+      .toEqual(['Success', 'Failure']);
   });
 });

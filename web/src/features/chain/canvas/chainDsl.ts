@@ -78,6 +78,21 @@ export function relationClassName(relationType: string): string {
   return `edge-${safe || 'success'}`;
 }
 
+// 新建连线的默认关系类型：优先 Success，否则取节点第一个可用关系（switch 无 Success）。
+export function defaultRelationFor(relationTypes: string[]): string {
+  return relationTypes.includes('Success') ? 'Success' : relationTypes[0] ?? 'Success';
+}
+
+// 某条边可切换的关系类型：排除同一 (source,target) 其他连线已占用的类型，避免重复三元组。
+// siblingUsed 为「除本边外、同 source+target 的连线」当前使用的关系类型列表。
+export function availableRelationsForEdge(
+  allRelations: string[],
+  siblingUsed: string[],
+): string[] {
+  const used = new Set(siblingUsed);
+  return allRelations.filter((relation) => !used.has(relation));
+}
+
 export const CONTAINER_TYPES = new Set(['for', 'flow']);
 export function isContainerType(ruleType: string): boolean {
   return CONTAINER_TYPES.has(ruleType);
@@ -115,11 +130,13 @@ export function dslToFlow(
   const edges: Edge[] = (meta.connections ?? []).map((c) => {
     const relationType = c.type || 'Success';
     return {
+      // 边 id 含关系类型后缀仅为初建时保证唯一；切换连接类型后该后缀可能过期，
+      // 但序列化（flowToDsl）只读 data.relationType，故无需也无法在此“修正” id。
       id: `${c.fromId}->${c.toId}:${relationType}`,
       type: EDGE_TYPE,
       source: c.fromId,
       target: c.toId,
-      sourceHandle: relationType,
+      // 节点现为单一无 id 输出端，不再写 sourceHandle；关系类型存于 data.relationType。
       label: relationType,
       data: { relationType },
       className: relationClassName(relationType),

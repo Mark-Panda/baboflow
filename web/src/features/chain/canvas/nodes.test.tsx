@@ -41,8 +41,8 @@ describe('RuleNode', () => {
     expect(container.querySelector('.rn-debug')).toBeTruthy();
   });
 
-  it('按 switch cases 动态渲染多个 source handle 与标签', () => {
-    const { container, getByText } = render(
+  it('渲染单个输出端口（连接类型改在连线上切换）', () => {
+    const { container } = render(
       <ReactFlowProvider>
         <RuleNode {...propsFor({
           ruleType: 'switch', name: '条件', category: 'filter',
@@ -55,12 +55,9 @@ describe('RuleNode', () => {
         })} />
       </ReactFlowProvider>
     );
-    expect(container.querySelectorAll('.react-flow__handle.source')).toHaveLength(4);
-    expect(getByText('Case1')).toBeTruthy();
-    expect(getByText('Case2')).toBeTruthy();
-    expect(getByText('Default')).toBeTruthy();
-    expect(getByText('Failure')).toBeTruthy();
-    expect(container.querySelector('[data-handleid="Case2"]')).toBeTruthy();
+    // 无论多少分支，节点只有一个无 id 的 source handle
+    expect(container.querySelectorAll('.react-flow__handle.source')).toHaveLength(1);
+    expect(container.querySelector('.react-flow__handle.target')).toBeTruthy();
   });
 });
 

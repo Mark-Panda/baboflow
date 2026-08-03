@@ -104,3 +104,21 @@ export function routeAround(s: Pt, t: Pt, obstacles: Rect[], gap: number = GAP):
     barriers.length > 0 ? Math.round(Math.min(...barriers.map((r) => r.y))) - 1 : midY;
   return [s, { x: s.x, y: safeY }, { x: t.x, y: safeY }, t];
 }
+
+/**
+ * 关系标签锚点：沿「源点 → 第一个拐点」方向取距源 offset 处。
+ * 多条连线汇入同一目标时，路径几何中心（getSmoothStepPath 的默认 label 位）会重叠；
+ * 而每条连线的首段是各自独有的，把标签锚在首段可避免相互遮挡。
+ * 首段不足 2*offset 时取其中点，避免压到拐点；无拐点时退回源→目标方向。
+ */
+export function labelAnchorNearSource(pts: Pt[], offset: number = 28): Pt {
+  const s = pts[0];
+  const next = pts[1] ?? pts[pts.length - 1];
+  if (!next) return s;
+  const dx = next.x - s.x;
+  const dy = next.y - s.y;
+  const len = Math.hypot(dx, dy);
+  if (len < 1) return s;
+  const dist = Math.min(offset, len / 2);
+  return { x: s.x + (dx / len) * dist, y: s.y + (dy / len) * dist };
+}
