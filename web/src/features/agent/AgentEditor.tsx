@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   App,
   Alert,
@@ -33,6 +33,21 @@ interface Option {
   value: number | string;
 }
 
+// 技能选项：携带来源类型（source）以支持按类型分组筛选。
+interface SkillOption extends Option {
+  source: string;
+}
+
+// 技能来源 → 中文（与 SKILL 页一致）。
+const SKILL_SOURCE_LABEL: Record<string, string> = {
+  component: '系统组件',
+  upload: '业务组件',
+  chain: '规则链',
+  agent: 'Agent',
+  builtin: '内置',
+};
+const skillSourceLabel = (s: string) => SKILL_SOURCE_LABEL[s] ?? s;
+
 export interface AgentEditorProps {
   // null=新建；否则编辑该 Agent（含内置，内置可改不可删、key 只读）
   agent: api.Agent | null;
@@ -53,9 +68,11 @@ export default function AgentEditor({ agent, open, onClose }: AgentEditorProps) 
   // 关联资源选项
   const [providers, setProviders] = useState<Option[]>([]);
   const [models, setModels] = useState<Option[]>([]);
-  const [skills, setSkills] = useState<Option[]>([]);
+  const [skills, setSkills] = useState<SkillOption[]>([]);
   const [mcps, setMcps] = useState<Option[]>([]);
   const [agentOpts, setAgentOpts] = useState<Option[]>([]);
+  // 技能来源筛选（多选）：选中若干类型后，技能下拉只展示这些类型；空=全部。
+  const [skillSourceFilter, setSkillSourceFilter] = useState<string[]>([]);
   const providerId = Form.useWatch('llmProviderId', form);
 
   // 打开时初始化表单 + 拉取静态选项
@@ -81,7 +98,7 @@ export default function AgentEditor({ agent, open, onClose }: AgentEditorProps) 
       setProviders(r.list.map((p) => ({ label: p.name, value: p.id }))),
     ).catch(() => {});
     skillApi.list({}).then((r) =>
-      setSkills(r.list.map((s) => ({ label: s.name, value: s.id }))),
+      setSkills(r.list.map((s) => ({ label: s.name, value: s.id, source: s.source }))),
     ).catch(() => {});
     mcpApi.listServers().then((r) =>
       setMcps(r.list.map((s) => ({ label: s.name, value: s.id }))),
@@ -124,6 +141,41 @@ export default function AgentEditor({ agent, open, onClose }: AgentEditorProps) 
       ),
     ).catch(() => {});
   }, [providerId]);
+
+  // 当前数据里实际存在的技能来源类型（按固定顺序），供筛选器使用。
+  const presentSkillSources = useMemo(() => {
+    const set = new Set(skills.map((s) => s.source));
+    const known = Object.keys(SKILL_SOURCE_LABEL).filter((k) => set.has(k));
+    const extra = [...set].filter((s) => !(s in SKILL_SOURCE_LABEL));
+    return [...known, ...extra];
+  }, [skills]);
+
+  // 选中类型筛选后，仅保留这些类型的技能；空筛选=全部。
+  const visibleSkills = useMemo(
+    () =>
+      skillSourceFilter.length
+        ? skills.filter((s) => skillSourceFilter.includes(s.source))
+        : skills,
+    [skills, skillSourceFilter],
+  );
+
+  // 技能下拉选项：按来源类型分组（Select.OptGroup），组内即技能。
+  const groupedSkillOptions = useMemo(() => {
+    const bySource = new Map<string, SkillOption[]>();
+    for (const s of visibleSkills) {
+      const arr = bySource.get(s.source) ?? [];
+      arr.push(s);
+      bySource.set(s.source, arr);
+    }
+    const order = [
+      ...Object.keys(SKILL_SOURCE_LABEL).filter((k) => bySource.has(k)),
+      ...[...bySource.keys()].filter((k) => !(k in SKILL_SOURCE_LABEL)),
+    ];
+    return order.map((src) => ({
+      label: skillSourceLabel(src),
+      options: (bySource.get(src) ?? []).map((s) => ({ label: s.label, value: s.value })),
+    }));
+  }, [visibleSkills]);
 
   const onSave = async () => {
     const v = await form.validateFields();
@@ -260,7 +312,33 @@ export default function AgentEditor({ agent, open, onClose }: AgentEditorProps) 
         </Form.Item>
 
         <Form.Item name="skillIds" label="技能（Skills）">
-          <Select mode="multiple" allowClear showSearch optionFilterProp="label" placeholder="挂载技能" options={skills} />
+          <Select
+            mode="multiple"
+            allowClear
+            showSearch
+            optionFilterProp="label"
+            placeholder="挂载技能"
+            options={groupedSkillOptions}
+            popupMatchSelectWidth={false}
+            popupRender={(menu) => (
+              <>
+                <div style={{ padding: '6px 8px', borderBottom: '1px solid #f0f0f0' }}>
+                  <Select
+                    mode="multiple"
+                    allowClear
+                    size="small"
+                    maxTagCount={2}
+                    placeholder="按类型筛选（默认全部）"
+                    style={{ width: '100%' }}
+                    value={skillSourceFilter}
+                    onChange={setSkillSourceFilter}
+                    options={presentSkillSources.map((s) => ({ label: skillSourceLabel(s), value: s }))}
+                  />
+                </div>
+                {menu}
+              </>
+            )}
+          />
         </Form.Item>
 
         <Form.Item name="mcpIds" label="MCP 服务">
