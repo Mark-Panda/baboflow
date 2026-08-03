@@ -8,7 +8,6 @@ import {
   InputNumber,
   Radio,
   Select,
-  Space,
   Switch,
 } from "antd";
 import { DeleteOutlined } from "@ant-design/icons";
@@ -21,6 +20,7 @@ import { relationFor, useRadio, widgetFor } from "./fieldWidgets";
 import RelationSelect from "./RelationSelect";
 import JsonField from "./JsonField";
 import KeyValueField from "./KeyValueField";
+import SwitchCasesBuilder from "./SwitchCasesBuilder";
 import CodeField from "@/components/CodeField";
 
 export interface NodeConfigPanelProps {
@@ -72,7 +72,13 @@ export default function NodeConfigPanel({
     changed: Record<string, unknown>,
     all: Record<string, unknown>,
   ) => {
-    const { __name, __debug, ...config } = all;
+    // 只保留真正的配置字段：剔除 __name/__debug 及 antd Form 内部键（fields 等），
+    // 避免把 Form 内部状态误写进 configuration（尤其 switch.cases 会被污染）。
+    const { __name, __debug, ...rest } = all;
+    const config: Record<string, unknown> = {};
+    Object.entries(rest).forEach(([k, v]) => {
+      if (!k.startsWith("__") && k !== "fields") config[k] = v;
+    });
     const patch: Partial<RuleNodeData> = { configuration: config };
     if ("__name" in changed) patch.name = __name as string;
     if ("__debug" in changed) patch.debugMode = !!__debug;
@@ -149,53 +155,12 @@ function SwitchCasesField({ field: f }: { field: ComponentFormField }) {
     </span>
   );
 
+  // 可视化构建器：IF/ELIF 分支（规则行 ⇄ 表达式），ELSE=Default 固定。
+  // 作为普通受控字段交给 antd Form（value/onChange 注入），随 onValuesChange 写回 configuration.cases。
   return (
-    <Form.List name="cases">
-      {(fields, { add, remove }) => (
-        <Form.Item label={label}>
-          <Space direction="vertical" style={{ width: "100%" }} size="small">
-            {fields.map((field, index) => (
-              <Space key={field.key} align="start" style={{ width: "100%" }}>
-                <Form.Item
-                  {...field}
-                  name={[field.name, "case"]}
-                  rules={[{ required: true, message: "请填写条件表达式" }]}
-                  style={{ flex: 1, marginBottom: 0 }}
-                >
-                  <Input.TextArea
-                    rows={2}
-                    placeholder="如 msg.temperature > 50"
-                    aria-label={`第${index + 1}条条件`}
-                  />
-                </Form.Item>
-                <Form.Item
-                  {...field}
-                  name={[field.name, "then"]}
-                  rules={[{ required: true, message: "请填写关系名称" }]}
-                  style={{ width: 110, marginBottom: 0 }}
-                >
-                  <Input placeholder="关系名" aria-label={`第${index + 1}条关系名`} />
-                </Form.Item>
-                <Button
-                  danger
-                  type="text"
-                  icon={<DeleteOutlined />}
-                  aria-label={`删除第${index + 1}条分支`}
-                  onClick={() => remove(field.name)}
-                />
-              </Space>
-            ))}
-            <Button
-              type="dashed"
-              block
-              onClick={() => add({ case: "", then: `Case${fields.length + 1}` })}
-            >
-              添加分支条件
-            </Button>
-          </Space>
-        </Form.Item>
-      )}
-    </Form.List>
+    <Form.Item name="cases" label={label}>
+      <SwitchCasesBuilder />
+    </Form.Item>
   );
 }
 

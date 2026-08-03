@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, Checkbox, Input, Segmented, Select, Table } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
@@ -34,16 +34,27 @@ const TYPE_PLACEHOLDER: Record<string, string> = {
 export default function InputSchemaField({ value, onChange }: InputSchemaFieldProps) {
   const [view, setView] = useState<'table' | 'json'>('table');
   const [rows, setRows] = useState<ParamRow[]>(() => schemaToRows(value));
+  // 记录最近一次由本组件 onChange 发出的 schema 指纹，用于识别"自身回环"，
+  // 避免在受控回环（尤其中文输入法 composition）中重置内部行、打断输入。
+  const lastEmittedRef = useRef<string | null>(null);
 
-  // 外部值变化（如切换链 / 从 JSON 视图同步）时重置内部行。
+  // 外部值变化（切换链 / JSON 视图编辑 / MCP 选链预填）时重置内部行。
+  // 若新值正是本组件刚发出的（受控回环），跳过重置以保持输入连续性。
   useEffect(() => {
+    const incoming = JSON.stringify(value ?? null);
+    if (lastEmittedRef.current !== null && incoming === lastEmittedRef.current) {
+      return; // 自身回环：不重置，避免打断 IME/输入
+    }
+    lastEmittedRef.current = null;
     setRows(schemaToRows(value));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(value ?? null)]);
 
   const commit = (next: ParamRow[]) => {
     setRows(next);
-    onChange?.(rowsToSchema(next));
+    const schema = rowsToSchema(next);
+    lastEmittedRef.current = JSON.stringify(schema ?? null);
+    onChange?.(schema);
   };
 
   const update = (key: string, patch: Partial<ParamRow>) =>

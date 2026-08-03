@@ -467,9 +467,6 @@ export default function ChainEditorPage() {
             style={{ width: 240, fontWeight: 600, fontSize: 14 }}
             placeholder="规则链名称"
           />
-          <Tooltip title="链设置：描述与入参格式（供 MCP / SKILL 调用方参考）">
-            <Button type="text" icon={<SettingOutlined />} onClick={() => setSettingsOpen(true)} />
-          </Tooltip>
           <Tag
             color={status === "published" ? "green" : "default"}
             style={{ marginLeft: 4 }}
@@ -486,6 +483,9 @@ export default function ChainEditorPage() {
           )}
 
           <Space style={{ marginLeft: "auto" }} size="small">
+            <Tooltip title="链设置：描述与入参格式（供 MCP / SKILL 调用方参考）">
+              <Button icon={<SettingOutlined />} onClick={() => setSettingsOpen(true)} />
+            </Tooltip>
             <Tooltip title="自动整理布局">
               <Button icon={<ApartmentOutlined />} onClick={onLayout} />
             </Tooltip>

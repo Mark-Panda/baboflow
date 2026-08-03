@@ -275,9 +275,9 @@
 }
 
 .bf-config {
-  flex: 0 0 320px;
-  width: 320px;
-  min-width: 320px;
+  flex: 0 0 480px;
+  width: 480px;
+  min-width: 480px;
   border-left: 1px solid #eef0f5;
   background: #fff;
   overflow: auto;
@@ -313,4 +313,107 @@
 /* 配置区字段描述更紧凑 */
 .bf-config .ant-form-item {
   margin-bottom: 14px;
+}
+
+/* ---- Switch 分支可视化构建器 ---- */
+.bf-switch-branch {
+  border: 1px solid #e8ebf3;
+  border-radius: 8px;
+  padding: 8px;
+  margin-bottom: 10px;
+  background: #fbfcfe;
+}
+.bf-switch-branch-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.bf-switch-tag {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  color: #4f6ef7;
+  background: #eef2ff;
+  border: 1px solid #d9e2ff;
+  border-radius: 5px;
+  padding: 1px 7px;
+  letter-spacing: 0.3px;
+}
+.bf-switch-then {
+  flex: 1;
+  min-width: 0;
+  font-family: monospace;
+}
+.bf-switch-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* 每条规则两行：上=连接符+运算符+删除，下=左值+右值 */
+.bf-switch-rule {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid #eef0f5;
+  border-radius: 6px;
+  background: #fff;
+}
+.bf-switch-rule-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.bf-switch-join {
+  flex: none;
+  width: 56px;
+  text-align: center;
+  font-size: 11px;
+  color: #6b7280;
+}
+.bf-switch-join-first {
+  color: #a2a9bd;
+  padding-left: 4px;
+  text-align: left;
+}
+.bf-switch-op {
+  flex: 1;
+  min-width: 0;
+}
+.bf-switch-rule-io {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.bf-switch-left {
+  flex: 1 1 0;
+  min-width: 0;
+  font-family: monospace;
+  font-size: 12px;
+}
+.bf-switch-right {
+  flex: 1 1 0;
+  min-width: 0;
+  font-family: monospace;
+  font-size: 12px;
+}
+.bf-switch-else {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  margin-bottom: 10px;
+  border: 1px dashed #e2e5ee;
+  border-radius: 8px;
+  background: #fafbfd;
+}
+.bf-switch-tag-else {
+  color: #9095a5;
+  background: #f0f1f5;
+  border-color: #e2e5ee;
+}
+.bf-switch-else-desc {
+  font-size: 11px;
+  color: #a2a9bd;
 }
