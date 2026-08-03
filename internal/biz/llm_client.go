@@ -16,6 +16,7 @@ import (
 	"baboflow/internal/data/po"
 
 	"github.com/go-kratos/kratos/v2/log"
+	"github.com/go-kratos/kratos/v2/middleware/tracing"
 )
 
 // llmClient 负责与 OpenAI 兼容接入点交互：测试连接、拉取模型列表。
@@ -27,10 +28,17 @@ type llmClient struct {
 // ErrInvalidBaseURL 表示接入点 baseUrl 未通过校验（客户端输入错误，应映射为 400）。
 var ErrInvalidBaseURL = errors.New("baseUrl 非法")
 
+// llmClientLogger 带 trace.id/span.id valuer,配合 WithContext(ctx) 让 LLM 调用日志
+// 携带请求 trace。valuer 为惰性求值,无 span(后台/测试)时字段为空、无副作用。
+var llmClientLogger = log.NewHelper(log.With(log.DefaultLogger,
+	"trace.id", tracing.TraceID(),
+	"span.id", tracing.SpanID(),
+))
+
 func newLLMClient() *llmClient {
 	return &llmClient{
 		http:   &http.Client{Timeout: 20 * time.Second},
-		logger: log.NewHelper(log.DefaultLogger),
+		logger: llmClientLogger,
 	}
 }
 
@@ -81,7 +89,7 @@ func (c *llmClient) FetchModels(ctx context.Context, baseURL, apiKey string) ([]
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode != http.StatusOK {
 		// 上游响应体可能含内网信息，仅记录到服务端日志，不回显给客户端。
-		c.logger.Warnf("FetchModels upstream %s returned %d: %s", normalizeBase(baseURL), resp.StatusCode, truncate(string(body), 200))
+		c.logger.WithContext(ctx).Warnf("FetchModels upstream %s returned %d: %s", normalizeBase(baseURL), resp.StatusCode, truncate(string(body), 200))
 		return nil, fmt.Errorf("上游返回状态 %d", resp.StatusCode)
 	}
 	var parsed struct {
@@ -131,7 +139,7 @@ func (c *llmClient) TestModel(ctx context.Context, baseURL, apiKey, model string
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	latency := time.Since(start).Milliseconds()
 	if resp.StatusCode != http.StatusOK {
-		c.logger.Warnf("TestModel upstream %s returned %d: %s", normalizeBase(baseURL), resp.StatusCode, truncate(string(body), 200))
+		c.logger.WithContext(ctx).Warnf("TestModel upstream %s returned %d: %s", normalizeBase(baseURL), resp.StatusCode, truncate(string(body), 200))
 		return latency, fmt.Errorf("上游返回状态 %d", resp.StatusCode)
 	}
 	return latency, nil

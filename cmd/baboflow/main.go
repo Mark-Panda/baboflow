@@ -8,6 +8,7 @@ import (
 
 	kratos "github.com/go-kratos/kratos/v2"
 	"github.com/go-kratos/kratos/v2/log"
+	"github.com/go-kratos/kratos/v2/middleware/tracing"
 	khttp "github.com/go-kratos/kratos/v2/transport/http"
 	"github.com/joho/godotenv"
 
@@ -95,7 +96,14 @@ func main() {
 	_ = godotenv.Load()
 	cfg := conf.Load()
 
-	logger := log.NewStdLogger(os.Stdout)
+	logger := log.With(log.NewStdLogger(os.Stdout),
+		"ts", log.DefaultTimestamp,
+		"caller", log.DefaultCaller,
+		"service.name", "baboflow",
+		"service.version", "0.1.0",
+		"trace.id", tracing.TraceID(),
+		"span.id", tracing.SpanID(),
+	)
 	helper := log.NewHelper(logger)
 
 	app, cleanup, err := wireApp(cfg)

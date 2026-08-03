@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	khttp "github.com/go-kratos/kratos/v2/transport/http"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 	"golang.org/x/time/rate"
 	"gorm.io/gorm"
 
@@ -41,6 +42,9 @@ func NewHTTPServer(
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
 	r.Use(gin.Recovery())
+	// OTel tracing：为每个请求生成 server span 并注入 request context，
+	// 使日志 valuer trace.id/span.id 可取到值（当前无 exporter，span 不上报）。
+	r.Use(otelgin.Middleware("baboflow"))
 
 	// Prometheus 指标
 	biz.RegisterMetrics()
