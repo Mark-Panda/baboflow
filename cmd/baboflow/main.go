@@ -28,20 +28,20 @@ import (
 type App struct {
 	HTTPServer *khttp.Server
 
-	Cfg          *conf.Config
-	ChainUC      *biz.RuleChainUsecase
-	McpUC        *biz.McpUsecase
-	CronUC       *biz.CronUsecase
-	BoardUC      *biz.BoardUsecase
-	SkillUC      *biz.SkillUsecase
-	ArcheryUC    *biz.ArcheryUsecase
-	AuditUC      *biz.AuditUsecase
-	AgentManager *agentkit.Manager
-	Eng          *rulegokit.Manager
-	CompSync     *biz.ComponentSync
-	CompRepo     biz.ComponentRepo
+	Cfg           *conf.Config
+	ChainUC       *biz.RuleChainUsecase
+	McpUC         *biz.McpUsecase
+	CronUC        *biz.CronUsecase
+	BoardUC       *biz.BoardUsecase
+	SkillUC       *biz.SkillUsecase
+	ArcheryUC     *biz.ArcheryUsecase
+	AuditUC       *biz.AuditUsecase
+	AgentManager  *agentkit.Manager
+	Eng           *rulegokit.Manager
+	CompSync      *biz.ComponentSync
+	CompRepo      biz.ComponentRepo
 	PlatformTools *biz.PlatformTools
-	Tracer       *agentkit.Tracer
+	Tracer        *agentkit.Tracer
 
 	// 各 handler：仅用于注入审计器。
 	AuthH    *service.AuthHandler
@@ -87,7 +87,7 @@ func newApp(
 		PlatformTools: platformTools, Tracer: tracer,
 		AuthH: authH, LLMH: llmH, ArcheryH: archeryH, ChainH: chainH,
 		FeishuH: feishuH,
-		SkillH: skillH, McpH: mcpH, BoardH: boardH,
+		SkillH:  skillH, McpH: mcpH, BoardH: boardH,
 	}
 }
 
@@ -174,6 +174,10 @@ func injectRuntime(app *App, helper *log.Helper) {
 	app.AgentManager.SetExtraToolFactory(func(ctx context.Context, sessionID string, a *po.Agent) ([]tool.BaseTool, error) {
 		return app.PlatformTools.Tools()
 	})
+
+	// 含技能包的技能：取技能时确保已解压落盘，把目录喂给 eino BaseDirectory，
+	// 让模型能用 read/bash 读包内 scripts/references 等附属文件。
+	app.AgentManager.SetEnsureSkillDir(app.SkillUC.EnsureExtracted)
 
 	// 组件变更 → 自动同步对应 SKILL。
 	app.CompSync.SetOnComponentChange(app.SkillUC.SyncComponentSkill)

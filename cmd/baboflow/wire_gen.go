@@ -57,7 +57,7 @@ func wireApp(c *conf.Config) (*App, func(), error) {
 	agentUsecase := biz.NewAgentUsecase(agentDataRepo, agentkitManager, c, assetStore, tracer)
 	agentHandler := service.NewAgentHandler(agentUsecase)
 	skillDataRepo := data.NewBizSkillDataRepo(db)
-	skillUsecase := biz.NewSkillUsecase(skillDataRepo, ruleChainUsecase)
+	skillUsecase := biz.NewSkillUsecase(skillDataRepo, ruleChainUsecase, c)
 	skillHandler := service.NewSkillHandler(skillUsecase)
 	mcpDataRepo := data.NewMcpRepo(db)
 	mcpUsecase := biz.NewMcpUsecase(mcpDataRepo, ruleChainUsecase)

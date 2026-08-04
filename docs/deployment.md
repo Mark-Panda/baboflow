@@ -40,8 +40,10 @@ docker compose up -d --build
 
 ## 数据持久化
 
-- `pgdata` volume：PostgreSQL 数据
-- `workspace` volume：Agent 内置工具（bash/read/write/edit/grep）沙箱
+- `pgdata` volume：PostgreSQL 数据（含用户、规则链、Agent、SKILL 等全部业务表）。**SKILL 技能包的 zip 归档也作为权威源存于 skill 表 `package bytea` 列**，随此卷持久化，重建不丢。
+- `workspace` volume：Agent 内置工具（bash/read/write/edit/grep）沙箱。**含包 SKILL 在运行时按需解压落盘到 `workspace/skills/<name>/`**，供模型经 eino `BaseDirectory` 读包内附属文件（references/scripts 等）；磁盘目录是可重建缓存——即便丢失（如卷被清），只要 DB 记录仍在，读取技能时会自动从 DB 归档重新解压（自愈）。
+
+> 因此 `docker compose down` / `up -d --build` 均不影响技能包；仅 `down -v` 同时清空两卷才会删除。
 
 ## 常用命令
 

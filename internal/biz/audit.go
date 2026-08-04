@@ -72,6 +72,7 @@ const (
 	AuditMcpRemove = "mcp.remove_exposure"
 
 	AuditSkillDelete = "skill.delete"
+	AuditSkillUpload = "skill.upload"
 
 	AuditTaskTrigger = "task.trigger"
 	AuditCronTrigger = "cron.trigger"

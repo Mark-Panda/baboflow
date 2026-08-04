@@ -37,6 +37,8 @@ type Manager struct {
 	factory *ModelFactory
 	builtin *BuiltinTools
 	extra   ExtraToolFactory
+	// ensureSkillDir 含包技能落盘回调（biz 注入），供 SkillBackend.Get 接通 BaseDirectory。
+	ensureSkillDir EnsureSkillDirFunc
 	maxStep int
 	mu      sync.RWMutex
 	cache   map[string]*cachedAgent
@@ -71,6 +73,9 @@ func NewManager(
 
 // SetExtraToolFactory 注入平台工具（rulechain_validate/create、skill_create、mcp 等）。
 func (m *Manager) SetExtraToolFactory(f ExtraToolFactory) { m.extra = f }
+
+// SetEnsureSkillDir 注入含包技能落盘回调（biz 提供），供 SkillBackend.Get 接通 BaseDirectory。
+func (m *Manager) SetEnsureSkillDir(f EnsureSkillDirFunc) { m.ensureSkillDir = f }
 
 // SetMaxStep 设置 ReAct 最大迭代步数。
 func (m *Manager) SetMaxStep(n int) {
@@ -143,6 +148,7 @@ func (m *Manager) build(ctx context.Context, cfg *po.Agent, depth int) (adk.Type
 	// SKILL 中间件：仅当绑定了 skill 时挂
 	if ids := parseIntIDs(cfg.SkillIDs); len(ids) > 0 {
 		backend := NewSkillBackend(m.skills, ids)
+		backend.SetEnsureDir(m.ensureSkillDir)
 		mw, err := skill.NewTyped[*schema.AgenticMessage](ctx, &skill.TypedConfig[*schema.AgenticMessage]{
 			Backend: backend,
 		})

@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
+	"sync"
 
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
 	"baboflow/internal/biz/agentkit"
+	"baboflow/internal/conf"
 	"baboflow/internal/data/po"
 )
 
@@ -33,10 +36,37 @@ type SkillUsecase struct {
 	repo      SkillDataRepo
 	chains    *RuleChainUsecase
 	genRunner SkillGenRunner
+	packageMu sync.Mutex
+	// workspaceRoot 技能包落盘根（cfg.Workspace）；包解压到 <workspaceRoot>/skills/<name>/。
+	workspaceRoot string
 }
 
-func NewSkillUsecase(repo SkillDataRepo, chains *RuleChainUsecase) *SkillUsecase {
-	return &SkillUsecase{repo: repo, chains: chains}
+// SkillInternalError 表示技能文件目录或归档处理失败，应返回服务器错误。
+type SkillInternalError struct {
+	Err error
+}
+
+func (e *SkillInternalError) Error() string { return e.Err.Error() }
+func (e *SkillInternalError) Unwrap() error { return e.Err }
+
+func wrapSkillStorageError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var pathErr *os.PathError
+	var linkErr *os.LinkError
+	if errors.As(err, &pathErr) || errors.As(err, &linkErr) {
+		return &SkillInternalError{Err: err}
+	}
+	return err
+}
+
+func NewSkillUsecase(repo SkillDataRepo, chains *RuleChainUsecase, c *conf.Config) *SkillUsecase {
+	root := ""
+	if c != nil {
+		root = c.Workspace
+	}
+	return &SkillUsecase{repo: repo, chains: chains, workspaceRoot: root}
 }
 
 // SetChains 注入规则链用例（生成/删除链级 SKILL 用）。
@@ -55,13 +85,14 @@ type SkillView struct {
 	ChainID     string         `json:"chainId"`
 	Frontmatter datatypes.JSON `json:"frontmatter"`
 	Content     string         `json:"content,omitempty"`
+	HasFiles    bool           `json:"hasFiles"`
 	CreatedAt   string         `json:"createdAt"`
 }
 
 func toSkillView(s *po.Skill, withContent bool) *SkillView {
 	v := &SkillView{
 		ID: s.ID, Name: s.Name, Description: s.Description, Source: s.Source,
-		ChainID: s.ChainID, Frontmatter: s.Frontmatter,
+		ChainID: s.ChainID, Frontmatter: s.Frontmatter, HasFiles: s.HasFiles,
 		CreatedAt: s.CreatedAt.Format("2006-01-02 15:04:05"),
 	}
 	if withContent {
@@ -89,11 +120,19 @@ func (uc *SkillUsecase) Get(ctx context.Context, id int64) (*SkillView, error) {
 	if err != nil {
 		return nil, ErrNotFound
 	}
+	// 懒落盘：含包技能若磁盘目录缺失（卷被清但 DB 在），用 DB 归档自愈重建。
+	if _, err := uc.EnsureExtracted(ctx, s); err != nil {
+		return nil, &SkillInternalError{Err: fmt.Errorf("技能 %q 文件目录准备失败: %w", s.Name, err)}
+	}
 	return toSkillView(s, true), nil
 }
 
 // Upload 上传/保存 SKILL.md 文本：解析 frontmatter 入库（幂等：同名覆盖）。
+// 纯文本技能：清空技能包字段（Package/FilePath/HasFiles），并清掉可能残留的旧包目录。
 func (uc *SkillUsecase) Upload(ctx context.Context, content, source string) (*SkillView, error) {
+	uc.packageMu.Lock()
+	defer uc.packageMu.Unlock()
+
 	fm, _, err := agentkit.ParseSkillMarkdown(content)
 	if err != nil {
 		return nil, err
@@ -110,10 +149,14 @@ func (uc *SkillUsecase) Upload(ctx context.Context, content, source string) (*Sk
 	s := &po.Skill{
 		Name: name, Description: desc, Source: source,
 		Frontmatter: datatypes.JSON(fmJSON), Content: content,
+		FilePath: "", Package: nil, HasFiles: false, // 纯文本：无包
 	}
 	if existing, err := uc.repo.GetByName(ctx, name); err == nil {
 		s.ID = existing.ID
 		s.ChainID = existing.ChainID
+		s.TenantID = existing.TenantID
+		s.Embedding = existing.Embedding
+		s.CreatedAt = existing.CreatedAt
 		if desc == "" {
 			s.Description = existing.Description
 		}
@@ -125,14 +168,23 @@ func (uc *SkillUsecase) Upload(ctx context.Context, content, source string) (*Sk
 			return nil, err
 		}
 	}
+	uc.removePackageDir(name) // 覆盖为纯文本时清掉旧包目录
 	return toSkillView(s, true), nil
 }
 
 func (uc *SkillUsecase) Delete(ctx context.Context, id int64) error {
-	if _, err := uc.repo.GetByID(ctx, id); err != nil {
+	uc.packageMu.Lock()
+	defer uc.packageMu.Unlock()
+
+	s, err := uc.repo.GetByID(ctx, id)
+	if err != nil {
 		return ErrNotFound
 	}
-	return uc.repo.Delete(ctx, id)
+	if err := uc.repo.Delete(ctx, id); err != nil {
+		return err
+	}
+	uc.removePackageDir(s.Name) // 同步清掉磁盘上的技能包目录
+	return nil
 }
 
 // ---- 组件自动 SKILL（零人工同步钩子，M1 已留 onComponentChange）----
@@ -140,6 +192,9 @@ func (uc *SkillUsecase) Delete(ctx context.Context, id int64) error {
 // SyncComponentSkill 组件变更时模板化生成/更新对应 SKILL（source=component）。
 // 供 ComponentSync 的 onComponentChange 回调调用。
 func (uc *SkillUsecase) SyncComponentSkill(ctx context.Context, m *po.ComponentMeta) error {
+	uc.packageMu.Lock()
+	defer uc.packageMu.Unlock()
+
 	name := ComponentSkillName(m.Type)
 	content := renderComponentSkill(m)
 	fm := map[string]any{"name": name, "description": m.Description}
@@ -149,7 +204,15 @@ func (uc *SkillUsecase) SyncComponentSkill(ctx context.Context, m *po.ComponentM
 		Frontmatter: datatypes.JSON(fmJSON), Content: content,
 	}
 	if existing, err := uc.repo.GetByName(ctx, name); err == nil {
+		// 不覆盖同名用户技能包，避免组件同步清掉用户上传的归档。
+		if existing.HasFiles {
+			return nil
+		}
 		s.ID = existing.ID
+		s.ChainID = existing.ChainID
+		s.TenantID = existing.TenantID
+		s.Embedding = existing.Embedding
+		s.CreatedAt = existing.CreatedAt
 		return uc.repo.Update(ctx, s)
 	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return fmt.Errorf("查询组件 SKILL %q 失败: %w", name, err)

@@ -12,6 +12,8 @@ RUN CGO_ENABLED=0 GOOS=linux GOPROXY=https://goproxy.cn,direct \
 FROM node:24-alpine AS web
 WORKDIR /web
 # 固定 pnpm@11（与本地 v11 / lockfileVersion 9.0 对齐）；node:24 满足 pnpm11 的 node>=22.13
+# 使用阿里云 npm 镜像，降低构建时访问 npm registry 失败的概率
+ENV npm_config_registry=https://registry.npmmirror.com
 RUN npm install -g pnpm@11
 COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile

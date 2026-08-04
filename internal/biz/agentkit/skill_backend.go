@@ -18,16 +18,24 @@ type SkillRepo interface {
 	GetByName(ctx context.Context, name string) (*po.Skill, error)
 }
 
+// EnsureSkillDirFunc 确保含包技能已解压落盘，返回其目录（供 BaseDirectory）。
+// 由上层（biz）注入，避免 agentkit 反向依赖落盘编排；纯文本技能不会被调用。
+type EnsureSkillDirFunc func(ctx context.Context, s *po.Skill) (string, error)
+
 // SkillBackend 用 DB 中的 skill 表实现 eino skill.Backend（List/Get）。
 // 每个 Agent 只暴露其绑定的 skillIDs。
 type SkillBackend struct {
-	repo SkillRepo
-	ids  []int64
+	repo      SkillRepo
+	ids       []int64
+	ensureDir EnsureSkillDirFunc // 可空；含包技能 Get 时先确保目录在位
 }
 
 func NewSkillBackend(repo SkillRepo, ids []int64) *SkillBackend {
 	return &SkillBackend{repo: repo, ids: ids}
 }
+
+// SetEnsureDir 注入含包技能的落盘回调（biz 提供）。
+func (b *SkillBackend) SetEnsureDir(f EnsureSkillDirFunc) { b.ensureDir = f }
 
 func (b *SkillBackend) List(ctx context.Context) ([]skill.FrontMatter, error) {
 	if len(b.ids) == 0 {
@@ -49,10 +57,21 @@ func (b *SkillBackend) Get(ctx context.Context, name string) (skill.Skill, error
 	if err != nil {
 		return skill.Skill{}, fmt.Errorf("skill %q 不存在: %w", name, err)
 	}
+	baseDir := s.FilePath
+	// 含包技能：先确保已解压落盘（磁盘丢失时从 DB 归档自愈），让模型能读包内附属文件。
+	if s.HasFiles && b.ensureDir != nil {
+		dir, derr := b.ensureDir(ctx, s)
+		if derr != nil {
+			return skill.Skill{}, fmt.Errorf("技能 %q 文件目录准备失败: %w", name, derr)
+		}
+		if dir != "" {
+			baseDir = dir
+		}
+	}
 	return skill.Skill{
 		FrontMatter:   toFrontMatter(s),
 		Content:       s.Content,
-		BaseDirectory: s.FilePath,
+		BaseDirectory: baseDir,
 	}, nil
 }
 

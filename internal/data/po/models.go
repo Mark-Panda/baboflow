@@ -11,19 +11,19 @@ import (
 // jsonb 统一用 datatypes.JSON；向量用 pgvector.Vector；多租户预留 TenantID。
 
 type AdminUser struct {
-	ID           int64      `gorm:"primaryKey"`
-	Username     string     `gorm:"size:64;uniqueIndex;not null"`
-	PasswordHash string     `gorm:"size:255;not null;default:''"` // 飞书用户无密码（空串占位，无法用密码登录）
-	DisplayName  string     `gorm:"size:64;not null;default:管理员"`
-	MustChangePwd bool      `gorm:"not null;default:false"` // 首次登录强制改密
+	ID            int64  `gorm:"primaryKey"`
+	Username      string `gorm:"size:64;uniqueIndex;not null"`
+	PasswordHash  string `gorm:"size:255;not null;default:''"` // 飞书用户无密码（空串占位，无法用密码登录）
+	DisplayName   string `gorm:"size:64;not null;default:管理员"`
+	MustChangePwd bool   `gorm:"not null;default:false"` // 首次登录强制改密
 	// 飞书 OAuth 登录标识。密码用户为 NULL（非空串），避免唯一索引在空串上冲突。
-	FeishuOpenID  *string `gorm:"size:64;uniqueIndex"`  // 飞书 open_id（唯一）
+	FeishuOpenID  *string `gorm:"size:64;uniqueIndex"` // 飞书 open_id（唯一）
 	FeishuUnionID string  `gorm:"size:64;not null;default:''"`
 	Avatar        string  `gorm:"size:512;not null;default:''"` // 头像 URL
 	Email         string  `gorm:"size:128;not null;default:''"`
-	LastLoginAt  *time.Time
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	LastLoginAt   *time.Time
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 func (AdminUser) TableName() string { return "admin_user" }
@@ -41,14 +41,14 @@ type Session struct {
 func (Session) TableName() string { return "session" }
 
 type LLMProvider struct {
-	ID        int64 `gorm:"primaryKey"`
-	TenantID  int64 `gorm:"index;not null;default:0"`
-	Name      string `gorm:"size:64;not null"`
-	Provider  string `gorm:"size:32;not null;default:openai"`
-	BaseURL   string `gorm:"size:255;not null"`
-	APIKeyEnc string `gorm:"type:text;not null"`
+	ID        int64          `gorm:"primaryKey"`
+	TenantID  int64          `gorm:"index;not null;default:0"`
+	Name      string         `gorm:"size:64;not null"`
+	Provider  string         `gorm:"size:32;not null;default:openai"`
+	BaseURL   string         `gorm:"size:255;not null"`
+	APIKeyEnc string         `gorm:"type:text;not null"`
 	Extra     datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'"`
-	Remark    string `gorm:"size:255;not null;default:''"`
+	Remark    string         `gorm:"size:255;not null;default:''"`
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	Models    []LLMModel `gorm:"foreignKey:ProviderID"`
@@ -57,50 +57,52 @@ type LLMProvider struct {
 func (LLMProvider) TableName() string { return "llm_provider" }
 
 type LLMModel struct {
-	ID          int64 `gorm:"primaryKey" json:"id"`
-	TenantID    int64 `gorm:"index;not null;default:0" json:"tenantId"`
-	ProviderID  int64 `gorm:"index;not null" json:"providerId"`
-	Model       string `gorm:"size:128;not null" json:"model"`
-	Alias       string `gorm:"size:64;not null;default:''" json:"alias"`
-	Temperature float64 `gorm:"type:numeric(3,2);not null;default:0.7" json:"temperature"`
-	MaxTokens   int    `gorm:"not null;default:4096" json:"maxTokens"`
-	IsDefault   bool   `gorm:"not null;default:false" json:"isDefault"`
+	ID          int64          `gorm:"primaryKey" json:"id"`
+	TenantID    int64          `gorm:"index;not null;default:0" json:"tenantId"`
+	ProviderID  int64          `gorm:"index;not null" json:"providerId"`
+	Model       string         `gorm:"size:128;not null" json:"model"`
+	Alias       string         `gorm:"size:64;not null;default:''" json:"alias"`
+	Temperature float64        `gorm:"type:numeric(3,2);not null;default:0.7" json:"temperature"`
+	MaxTokens   int            `gorm:"not null;default:4096" json:"maxTokens"`
+	IsDefault   bool           `gorm:"not null;default:false" json:"isDefault"`
 	Capability  datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'" json:"capability"`
-	Enabled     bool   `gorm:"not null;default:true" json:"enabled"`
-	CreatedAt   time.Time `json:"createdAt"`
-	UpdatedAt   time.Time `json:"updatedAt"`
+	Enabled     bool           `gorm:"not null;default:true" json:"enabled"`
+	CreatedAt   time.Time      `json:"createdAt"`
+	UpdatedAt   time.Time      `json:"updatedAt"`
 }
 
 func (LLMModel) TableName() string { return "llm_model" }
 
 type ComponentMeta struct {
-	ID          int64 `gorm:"primaryKey"`
-	Type        string `gorm:"size:128;uniqueIndex;not null"`
-	Name        string `gorm:"size:128;not null"`
-	Category    string `gorm:"size:32;index;not null"`
-	Description string `gorm:"type:text;not null;default:''"`
-	ConfigSchema datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'"`
-	Example     datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'"`
-	Fingerprint string `gorm:"size:64;not null;default:''"`
-	Embedding   *pgvector.Vector `gorm:"type:vector"` // 可空：未配置 embedding 时为 NULL
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID           int64            `gorm:"primaryKey"`
+	Type         string           `gorm:"size:128;uniqueIndex;not null"`
+	Name         string           `gorm:"size:128;not null"`
+	Category     string           `gorm:"size:32;index;not null"`
+	Description  string           `gorm:"type:text;not null;default:''"`
+	ConfigSchema datatypes.JSON   `gorm:"type:jsonb;not null;default:'{}'"`
+	Example      datatypes.JSON   `gorm:"type:jsonb;not null;default:'{}'"`
+	Fingerprint  string           `gorm:"size:64;not null;default:''"`
+	Embedding    *pgvector.Vector `gorm:"type:vector"` // 可空：未配置 embedding 时为 NULL
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 func (ComponentMeta) TableName() string { return "component_meta" }
 
 type Skill struct {
-	ID          int64 `gorm:"primaryKey"`
-	TenantID    int64 `gorm:"index;not null;default:0"`
-	Name        string `gorm:"size:128;uniqueIndex;not null"`
-	Description string `gorm:"size:512;not null;default:''"`
-	Source      string `gorm:"size:16;not null;default:upload"` // upload/chain/builtin/component
-	ChainID     string `gorm:"size:64;not null;default:''"`
-	Frontmatter datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'"`
-	Content     string `gorm:"type:text;not null"`
-	FilePath    string `gorm:"size:255;not null;default:''"`
-	Embedding   *pgvector.Vector `gorm:"type:vector"` // 可空
-	DeletedAt   *time.Time `gorm:"index"`
+	ID          int64            `gorm:"primaryKey"`
+	TenantID    int64            `gorm:"index;not null;default:0"`
+	Name        string           `gorm:"size:128;uniqueIndex;not null"`
+	Description string           `gorm:"size:512;not null;default:''"`
+	Source      string           `gorm:"size:16;not null;default:upload"` // upload/chain/builtin/component
+	ChainID     string           `gorm:"size:64;not null;default:''"`
+	Frontmatter datatypes.JSON   `gorm:"type:jsonb;not null;default:'{}'"`
+	Content     string           `gorm:"type:text;not null"`
+	FilePath    string           `gorm:"size:255;not null;default:''"` // 技能包解压目录（workspace/skills/<name> 绝对路径）；空=纯文本技能
+	Package     []byte           `gorm:"type:bytea"`                   // 技能包 zip 归档（权威源，随 DB 持久化）；空=无包
+	HasFiles    bool             `gorm:"not null;default:false"`       // 是否含技能包文件（列表/详情判包用）
+	Embedding   *pgvector.Vector `gorm:"type:vector"`                  // 可空
+	DeletedAt   *time.Time       `gorm:"index"`
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
@@ -108,18 +110,18 @@ type Skill struct {
 func (Skill) TableName() string { return "skill" }
 
 type Agent struct {
-	ID            int64 `gorm:"primaryKey"`
-	TenantID      int64 `gorm:"index;not null;default:0"`
+	ID            int64  `gorm:"primaryKey"`
+	TenantID      int64  `gorm:"index;not null;default:0"`
 	Key           string `gorm:"size:64;uniqueIndex;not null"`
 	Name          string `gorm:"size:128;not null"`
 	Instruction   string `gorm:"type:text;not null;default:''"`
 	LLMModelID    *int64
-	MemoryBackend string `gorm:"size:16;not null;default:builtin"`
+	MemoryBackend string         `gorm:"size:16;not null;default:builtin"`
 	SkillIDs      datatypes.JSON `gorm:"type:jsonb;not null;default:'[]'"`
 	McpIDs        datatypes.JSON `gorm:"type:jsonb;not null;default:'[]'"`
 	BuiltinTools  datatypes.JSON `gorm:"type:jsonb;not null;default:'[\"bash\",\"read\",\"write\",\"edit\",\"grep\"]'"`
-	IsBuiltin     bool   `gorm:"not null;default:false"`
-	Enabled       bool   `gorm:"not null;default:true"`
+	IsBuiltin     bool           `gorm:"not null;default:false"`
+	Enabled       bool           `gorm:"not null;default:true"`
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 }
@@ -127,9 +129,9 @@ type Agent struct {
 func (Agent) TableName() string { return "agent" }
 
 type AgentSubAgent struct {
-	ID          int64 `gorm:"primaryKey"`
-	ParentID    int64 `gorm:"uniqueIndex:idx_parent_child;not null"`
-	ChildID     int64 `gorm:"uniqueIndex:idx_parent_child;not null"`
+	ID          int64  `gorm:"primaryKey"`
+	ParentID    int64  `gorm:"uniqueIndex:idx_parent_child;not null"`
+	ChildID     int64  `gorm:"uniqueIndex:idx_parent_child;not null"`
 	Description string `gorm:"size:512;not null;default:''"`
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
@@ -140,11 +142,11 @@ func (AgentSubAgent) TableName() string { return "agent_sub_agent" }
 // ---- Agent 会话 / 消息 / 附件（M5）----
 
 type AgentSession struct {
-	ID        string `gorm:"primaryKey;size:64" json:"id"` // uuid
-	TenantID  int64  `gorm:"index;not null;default:0" json:"tenantId"`
-	AgentKey  string `gorm:"size:64;index;not null" json:"agentKey"`
-	UserID    *int64 `gorm:"index" json:"userId,omitempty"`
-	Title     string `gorm:"size:255;not null;default:''" json:"title"`
+	ID        string    `gorm:"primaryKey;size:64" json:"id"` // uuid
+	TenantID  int64     `gorm:"index;not null;default:0" json:"tenantId"`
+	AgentKey  string    `gorm:"size:64;index;not null" json:"agentKey"`
+	UserID    *int64    `gorm:"index" json:"userId,omitempty"`
+	Title     string    `gorm:"size:255;not null;default:''" json:"title"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
@@ -152,33 +154,32 @@ type AgentSession struct {
 func (AgentSession) TableName() string { return "agent_session" }
 
 type AgentMessage struct {
-	ID         int64  `gorm:"primaryKey" json:"id"`
-	SessionID  string `gorm:"size:64;index;not null" json:"sessionId"`
-	Role       string `gorm:"size:16;index;not null" json:"role"` // user/assistant/tool/system
-	Content    string `gorm:"type:text;not null;default:''" json:"content"`
-	ToolCalls  datatypes.JSON `gorm:"type:jsonb;not null;default:'[]'" json:"toolCalls"`  // [{name,input,output,status}]
-	Attachment datatypes.JSON `gorm:"type:jsonb;not null;default:'[]'" json:"attachment"` // [{assetId,name,mime,url}]
-	SubAgent   string `gorm:"size:64;not null;default:''" json:"subAgent,omitempty"` // 由哪个 subAgent 产出
-	TraceID    string `gorm:"size:64;not null;default:''" json:"traceId,omitempty"`
-	CreatedAt  time.Time `json:"createdAt"`
+	ID         int64          `gorm:"primaryKey" json:"id"`
+	SessionID  string         `gorm:"size:64;index;not null" json:"sessionId"`
+	Role       string         `gorm:"size:16;index;not null" json:"role"` // user/assistant/tool/system
+	Content    string         `gorm:"type:text;not null;default:''" json:"content"`
+	ToolCalls  datatypes.JSON `gorm:"type:jsonb;not null;default:'[]'" json:"toolCalls"`     // [{name,input,output,status}]
+	Attachment datatypes.JSON `gorm:"type:jsonb;not null;default:'[]'" json:"attachment"`    // [{assetId,name,mime,url}]
+	SubAgent   string         `gorm:"size:64;not null;default:''" json:"subAgent,omitempty"` // 由哪个 subAgent 产出
+	TraceID    string         `gorm:"size:64;not null;default:''" json:"traceId,omitempty"`
+	CreatedAt  time.Time      `json:"createdAt"`
 }
 
 func (AgentMessage) TableName() string { return "agent_message" }
 
 type Asset struct {
-	ID        int64  `gorm:"primaryKey" json:"id"`
-	TenantID  int64  `gorm:"index;not null;default:0" json:"tenantId"`
-	Name      string `gorm:"size:255;not null" json:"name"`
-	Mime      string `gorm:"size:128;not null;default:''" json:"mime"`
-	Size      int64  `gorm:"not null;default:0" json:"size"`
-	Path      string `gorm:"size:512;not null" json:"path"` // 本地存储相对路径
-	SessionID string `gorm:"size:64;index;not null;default:''" json:"sessionId,omitempty"`
-	CreatedBy *int64 `json:"createdBy,omitempty"`
+	ID        int64     `gorm:"primaryKey" json:"id"`
+	TenantID  int64     `gorm:"index;not null;default:0" json:"tenantId"`
+	Name      string    `gorm:"size:255;not null" json:"name"`
+	Mime      string    `gorm:"size:128;not null;default:''" json:"mime"`
+	Size      int64     `gorm:"not null;default:0" json:"size"`
+	Path      string    `gorm:"size:512;not null" json:"path"` // 本地存储相对路径
+	SessionID string    `gorm:"size:64;index;not null;default:''" json:"sessionId,omitempty"`
+	CreatedBy *int64    `json:"createdBy,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
 }
 
 func (Asset) TableName() string { return "asset" }
-
 
 type AuditLog struct {
 	ID         int64          `gorm:"primaryKey" json:"id"`
@@ -197,10 +198,10 @@ func (AuditLog) TableName() string { return "audit_log" }
 // ---- 规则链（M2）----
 
 type RuleChain struct {
-	ID          string         `gorm:"primaryKey;size:64" json:"id"`
-	TenantID    int64          `gorm:"index;not null;default:0" json:"tenantId"`
-	Name        string         `gorm:"size:128;not null" json:"name"`
-	Description string         `gorm:"size:512;not null;default:''" json:"description"`
+	ID          string `gorm:"primaryKey;size:64" json:"id"`
+	TenantID    int64  `gorm:"index;not null;default:0" json:"tenantId"`
+	Name        string `gorm:"size:128;not null" json:"name"`
+	Description string `gorm:"size:512;not null;default:''" json:"description"`
 	// InputSchema 规则链入参 JSON Schema（可选），供 MCP 暴露/SKILL 生成向调用方说明如何传参。
 	InputSchema datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'" json:"inputSchema"`
 	DSL         datatypes.JSON `gorm:"type:jsonb;not null" json:"dsl"`
@@ -232,7 +233,7 @@ type ChainRun struct {
 	TenantID   int64          `gorm:"index;not null;default:0" json:"tenantId"`
 	ChainID    string         `gorm:"size:64;index;not null" json:"chainId"`
 	TaskID     *int64         `json:"taskId,omitempty"`
-	Trigger    string         `gorm:"size:16;not null;default:manual" json:"trigger"` // manual/task/mcp/cron
+	Trigger    string         `gorm:"size:16;not null;default:manual" json:"trigger"`       // manual/task/mcp/cron
 	Status     string         `gorm:"size:16;index;not null;default:running" json:"status"` // running/success/failure/timeout
 	Input      datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'" json:"input"`
 	Output     datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'" json:"output"`
@@ -328,8 +329,8 @@ type CronJob struct {
 	ID           int64          `gorm:"primaryKey" json:"id"`
 	TenantID     int64          `gorm:"index;not null;default:0" json:"tenantId"`
 	Name         string         `gorm:"size:128;not null;default:''" json:"name"`
-	TargetType   string         `gorm:"size:16;not null" json:"targetType"`   // chain / agent
-	TargetID     string         `gorm:"size:64;not null" json:"targetId"`     // rule_chain.id 或 agent.key
+	TargetType   string         `gorm:"size:16;not null" json:"targetType"`                // chain / agent
+	TargetID     string         `gorm:"size:64;not null" json:"targetId"`                  // rule_chain.id 或 agent.key
 	ScheduleType string         `gorm:"size:16;not null;default:cron" json:"scheduleType"` // once/interval/cron
 	CronExpr     string         `gorm:"size:64;not null;default:''" json:"cronExpr"`
 	IntervalSec  int            `gorm:"not null;default:0" json:"intervalSec"`
@@ -369,7 +370,7 @@ func (ArcheryConnection) TableName() string { return "archery_connection" }
 // 由「更新实例」从 Archery 拉取（upsert），instance_name 即节点查询时的 instance_name。
 type ArcheryInstance struct {
 	ID           int64     `gorm:"primaryKey" json:"id"`
-	ConnectionID int64     `gorm:"index;not null" json:"connectionId"`                                  // 所属 archery_connection
+	ConnectionID int64     `gorm:"index;not null" json:"connectionId"`                                   // 所属 archery_connection
 	InstanceName string    `gorm:"size:128;not null;uniqueIndex:uniq_conn_instance" json:"instanceName"` // Archery 实例名
 	DBType       string    `gorm:"size:32;not null;default:''" json:"dbType"`                            // mysql/postgresql/...
 	CreatedAt    time.Time `json:"createdAt"`

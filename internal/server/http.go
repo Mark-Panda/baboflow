@@ -210,6 +210,11 @@ func NewHTTPServer(
 		{
 			skill.GET("", skillH.List)
 			skill.POST("", skillH.Upload)
+			// 技能包（ZIP 多文件）：上传 / 文件清单 / 读文件 / 下载归档。
+			skill.POST("/package", skillH.UploadPackage)
+			skill.GET("/:id/files", skillH.ListFiles)
+			skill.GET("/:id/file", skillH.ReadFile)
+			skill.GET("/:id/package", skillH.DownloadPackage)
 			skill.GET("/:id", skillH.Get)
 			skill.DELETE("/:id", skillH.Delete)
 		}
