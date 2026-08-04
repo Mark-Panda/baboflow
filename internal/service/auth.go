@@ -8,7 +8,7 @@ import (
 )
 
 type AuthHandler struct {
-	auth   *biz.AuthUsecase
+	auth    *biz.AuthUsecase
 	auditor *biz.AuditUsecase
 }
 
@@ -42,7 +42,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 	h.audit(c, &res.UserID, biz.AuditLogin, "auth", req.Username, nil)
 	// HttpOnly Cookie, 7 天
-	c.SetCookie(biz.SessionCookieName, res.SessionID, 7*24*3600, "/", "", false, true)
+	setSessionCookie(c, biz.SessionCookieName, res.SessionID, 7*24*3600)
 	httputil.OK(c, gin.H{
 		"userId": res.UserID, "username": res.Username,
 		"displayName": res.DisplayName, "mustChangePwd": res.MustChangePwd,
@@ -53,7 +53,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	uid := CurrentUserID(c)
 	_ = h.auth.Logout(c.Request.Context(), CurrentSessionID(c))
 	h.audit(c, &uid, biz.AuditLogout, "auth", "", nil)
-	c.SetCookie(biz.SessionCookieName, "", -1, "/", "", false, true)
+	setSessionCookie(c, biz.SessionCookieName, "", -1)
 	httputil.OK(c, gin.H{})
 }
 
@@ -81,7 +81,7 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 		httputil.BadRequest(c, "参数错误：新密码至少 6 位")
 		return
 	}
-	if err := h.auth.ChangePassword(c.Request.Context(), CurrentUserID(c), req.OldPassword, req.NewPassword); err != nil {
+	if err := h.auth.ChangePassword(c.Request.Context(), CurrentUserID(c), req.OldPassword, req.NewPassword, CurrentSessionID(c)); err != nil {
 		httputil.BadRequest(c, err.Error())
 		return
 	}

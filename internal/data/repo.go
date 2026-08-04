@@ -88,6 +88,11 @@ func (r *authRepo) DeleteSession(ctx context.Context, id string) error {
 	return r.db.WithContext(ctx).Where("id = ?", id).Delete(&po.Session{}).Error
 }
 
+func (r *authRepo) DeleteOtherSessions(ctx context.Context, userID int64, keepSessionID string) error {
+	return r.db.WithContext(ctx).Where("user_id = ? AND id <> ?", userID, keepSessionID).
+		Delete(&po.Session{}).Error
+}
+
 // ---- LLMRepo ----
 
 type llmRepo struct{ db *gorm.DB }

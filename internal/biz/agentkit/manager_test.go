@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/CoolBanHub/aggo/memory"
+	"github.com/cloudwego/eino/schema"
 	"gorm.io/datatypes"
 
 	"baboflow/internal/conf"
@@ -42,6 +44,140 @@ type stubLLMResolver struct {
 	provider *po.LLMProvider
 	model    *po.LLMModel
 	err      error
+}
+
+type trackingMemoryProvider struct {
+	closed bool
+}
+
+type resultMemoryProvider struct {
+	result *memory.RetrieveResult
+}
+
+func (p *resultMemoryProvider) Retrieve(context.Context, *memory.RetrieveRequest) (*memory.RetrieveResult, error) {
+	return p.result, nil
+}
+func (p *resultMemoryProvider) Memorize(context.Context, *memory.MemorizeRequest) error { return nil }
+func (p *resultMemoryProvider) Close() error                                            { return nil }
+
+func (p *trackingMemoryProvider) Retrieve(context.Context, *memory.RetrieveRequest) (*memory.RetrieveResult, error) {
+	return nil, nil
+}
+func (p *trackingMemoryProvider) Memorize(context.Context, *memory.MemorizeRequest) error {
+	return nil
+}
+func (p *trackingMemoryProvider) Close() error {
+	p.closed = true
+	return nil
+}
+
+func TestManagerInvalidateClosesUnusedMemoryProvider(t *testing.T) {
+	provider := &trackingMemoryProvider{}
+	mgr := &Manager{
+		cache: map[string]*cachedAgent{
+			"agent-a": {memoryKey: "model-a"},
+		},
+		memoryProviders: map[string]memory.MemoryProvider{"model-a": provider},
+		memoryRefs:      map[string]int{"model-a": 1},
+	}
+
+	mgr.Invalidate("agent-a")
+
+	if _, ok := mgr.memoryProviders["model-a"]; ok {
+		t.Fatal("expected unused memory provider to be removed")
+	}
+	if err := mgr.Close(); err != nil {
+		t.Fatalf("close manager: %v", err)
+	}
+	if !provider.closed {
+		t.Fatal("expected retired memory provider to close with manager")
+	}
+}
+
+func TestManagerKeepsSharedMemoryProviderUntilLastAgentInvalidated(t *testing.T) {
+	provider := &trackingMemoryProvider{}
+	mgr := &Manager{
+		cache: map[string]*cachedAgent{
+			"agent-a": {memoryKey: "model-a"},
+			"agent-b": {memoryKey: "model-a"},
+		},
+		memoryProviders: map[string]memory.MemoryProvider{"model-a": provider},
+		memoryRefs:      map[string]int{"model-a": 2},
+	}
+
+	mgr.Invalidate("agent-a")
+	if provider.closed {
+		t.Fatal("shared memory provider must remain until last reference")
+	}
+	mgr.Invalidate("agent-b")
+	if provider.closed {
+		t.Fatal("retired provider must remain open until manager close")
+	}
+	if err := mgr.Close(); err != nil {
+		t.Fatalf("close manager: %v", err)
+	}
+	if !provider.closed {
+		t.Fatal("expected provider to close with manager")
+	}
+}
+
+func TestMemoryProviderDoesNotDuplicateBusinessHistory(t *testing.T) {
+	result := &memory.RetrieveResult{
+		ContextMessages: []*schema.AgenticMessage{schema.UserAgenticMessage("用户记忆")},
+		HistoryMessages: []*schema.AgenticMessage{schema.UserAgenticMessage("记忆历史")},
+	}
+	result = memoryResultForRun(result, true)
+	if len(result.ContextMessages) != 1 {
+		t.Fatalf("expected memory context, got %d messages", len(result.ContextMessages))
+	}
+	if len(result.HistoryMessages) != 0 {
+		t.Fatalf("memory provider must not duplicate business history, got %d messages", len(result.HistoryMessages))
+	}
+}
+
+func TestMemoryProviderKeepsHistoryWhenNoBusinessHistoryIsPassed(t *testing.T) {
+	result := memoryResultForRun(&memory.RetrieveResult{
+		HistoryMessages: []*schema.AgenticMessage{schema.UserAgenticMessage("记忆历史")},
+	}, false)
+	if len(result.HistoryMessages) != 1 {
+		t.Fatalf("expected memory history, got %d messages", len(result.HistoryMessages))
+	}
+}
+
+func TestResultMemoryProviderPreservesMemoryContext(t *testing.T) {
+	provider := &fallbackMemoryProvider{MemoryProvider: &resultMemoryProvider{
+		result: &memory.RetrieveResult{
+			ContextMessages: []*schema.AgenticMessage{schema.UserAgenticMessage("用户记忆")},
+			HistoryMessages: []*schema.AgenticMessage{schema.UserAgenticMessage("记忆历史")},
+		},
+	}}
+
+	result, err := provider.Retrieve(context.Background(), &memory.RetrieveRequest{})
+	if err != nil {
+		t.Fatalf("retrieve: %v", err)
+	}
+	if len(result.ContextMessages) != 1 {
+		t.Fatalf("expected memory context, got %d messages", len(result.ContextMessages))
+	}
+	if len(result.HistoryMessages) != 0 {
+		t.Fatalf("memory provider must not duplicate history, got %d messages", len(result.HistoryMessages))
+	}
+}
+
+func TestManagerDoesNotOverwriteNewerAgentCache(t *testing.T) {
+	mgr := &Manager{
+		cache: map[string]*cachedAgent{
+			"agent-a": {updatedAt: 2},
+		},
+		memoryProviders: map[string]memory.MemoryProvider{},
+		memoryRefs:      map[string]int{},
+	}
+
+	mgr.cacheAgent("agent-a", 1, nil, "")
+
+	if got := mgr.cache["agent-a"].updatedAt; got != 2 {
+		t.Fatalf("stale build overwrote newer cache version: got %d", got)
+	}
 }
 
 func (s *stubLLMResolver) ResolveForAgent(ctx context.Context, modelID *int64) (*po.LLMProvider, *po.LLMModel, error) {

@@ -1,6 +1,9 @@
 package service
 
 import (
+	"net/http"
+	"strings"
+
 	"github.com/gin-gonic/gin"
 
 	"baboflow/internal/biz"
@@ -12,6 +15,12 @@ const (
 	ctxUserID  = "babo_uid"
 	ctxSession = "babo_sid"
 )
+
+func setSessionCookie(c *gin.Context, name, value string, maxAge int) {
+	c.SetSameSite(http.SameSiteLaxMode)
+	secure := c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
+	c.SetCookie(name, value, maxAge, "/", "", secure, true)
+}
 
 // AuthMiddleware Session 认证：从 Cookie 读 sid，校验后注入 userID。除白名单外强制登录。
 func AuthMiddleware(auth *biz.AuthUsecase) gin.HandlerFunc {

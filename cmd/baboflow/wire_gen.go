@@ -76,8 +76,9 @@ func wireApp(c *conf.Config) (*App, func(), error) {
 	httpServer := server.NewHTTPServer(c, authUsecase, authHandler, feishuHandler, llmHandler, archeryHandler, componentHandler, ruleChainHandler, agentHandler, skillHandler, mcpHandler, boardHandler, auditHandler, cronHandler, wsHub, mcpUsecase, db)
 	platformDeps := biz.NewPlatformDeps(componentRepo, ruleChainUsecase, skillUsecase)
 	platformTools := biz.NewPlatformTools(platformDeps)
-	app := newApp(httpServer, c, ruleChainUsecase, mcpUsecase, cronUsecase, boardUsecase, skillUsecase, archeryUsecase, auditUsecase, agentkitManager, manager, componentSync, componentRepo, platformTools, tracer, authHandler, feishuHandler, llmHandler, archeryHandler, ruleChainHandler, skillHandler, mcpHandler, boardHandler)
+	app := newApp(httpServer, c, db, ruleChainUsecase, mcpUsecase, cronUsecase, boardUsecase, skillUsecase, archeryUsecase, auditUsecase, agentUsecase, agentkitManager, manager, componentSync, componentRepo, platformTools, tracer, authHandler, feishuHandler, llmHandler, archeryHandler, ruleChainHandler, skillHandler, mcpHandler, boardHandler)
 	return app, func() {
+		_ = agentkitManager.Close()
 		cleanup()
 	}, nil
 }

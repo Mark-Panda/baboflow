@@ -20,6 +20,27 @@ type fakeAgentRepo struct {
 	subAgentIDs   []int64
 }
 
+type sessionDeleteRepo struct {
+	AgentDataRepo
+	session *po.AgentSession
+	deleted bool
+}
+
+func (r *sessionDeleteRepo) GetSession(context.Context, string) (*po.AgentSession, error) {
+	return r.session, nil
+}
+
+func (r *sessionDeleteRepo) DeleteSession(context.Context, string) error {
+	r.deleted = true
+	return nil
+}
+
+type failingSessionMemoryCleaner struct{}
+
+func (failingSessionMemoryCleaner) DeleteSessionData(context.Context, string, string) error {
+	return errors.New("memory cleanup failed")
+}
+
 func (r *fakeAgentRepo) GetAgentByKey(_ context.Context, key string) (*po.Agent, error) {
 	if r.agent == nil || r.agent.Key != key {
 		return nil, errors.New("not found")
@@ -40,6 +61,33 @@ func (r *fakeAgentRepo) SetSubAgents(_ context.Context, _ int64, childIDs []int6
 
 func newTestAgentUsecase(repo AgentDataRepo) *AgentUsecase {
 	return NewAgentUsecase(repo, agentkit.NewManager(nil, nil, nil, nil, nil), nil, nil, nil)
+}
+
+func TestDeleteSessionKeepsBusinessDataWhenMemoryCleanupFails(t *testing.T) {
+	repo := &sessionDeleteRepo{
+		session: &po.AgentSession{ID: "session-1", UserID: ptrInt64(42)},
+	}
+	uc := newTestAgentUsecase(repo)
+	uc.SetSessionMemoryCleaner(failingSessionMemoryCleaner{})
+
+	if err := uc.DeleteSession(context.Background(), "session-1", 42); err == nil {
+		t.Fatal("expected memory cleanup error")
+	}
+	if repo.deleted {
+		t.Fatal("business session must remain when memory cleanup fails")
+	}
+}
+
+func ptrInt64(v int64) *int64 { return &v }
+
+func TestAssetMustBelongToCurrentSession(t *testing.T) {
+	asset := &po.Asset{SessionID: "session-a"}
+	if allowAssetForSession(asset, "session-b") {
+		t.Fatal("asset from another session must not be accepted")
+	}
+	if !allowAssetForSession(asset, "session-a") {
+		t.Fatal("asset from current session should be accepted")
+	}
 }
 
 // 内置 Agent：仅技能/MCP/子Agent（及启用）可改，核心定义被锁定。

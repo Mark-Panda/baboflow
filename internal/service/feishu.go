@@ -41,7 +41,7 @@ func (h *FeishuHandler) Login(c *gin.Context) {
 	}
 	state := newOAuthState()
 	// state cookie 10 分钟有效，HttpOnly，与 baboflow_sid 一致的 SameSite 默认。
-	c.SetCookie(feishuStateCookie, state, 600, "/", "", false, true)
+	setSessionCookie(c, feishuStateCookie, state, 600)
 	c.Redirect(http.StatusFound, h.uc.BuildAuthURL(state))
 }
 
@@ -50,7 +50,7 @@ func (h *FeishuHandler) Login(c *gin.Context) {
 func (h *FeishuHandler) Callback(c *gin.Context) {
 	// 校验 state（防 CSRF），随后立即作废该 cookie。
 	stateCookie, _ := c.Cookie(feishuStateCookie)
-	c.SetCookie(feishuStateCookie, "", -1, "/", "", false, true)
+	setSessionCookie(c, feishuStateCookie, "", -1)
 	state := c.Query("state")
 	if stateCookie == "" || state == "" || state != stateCookie {
 		h.redirectLoginErr(c, "登录状态校验失败，请重试")
@@ -69,7 +69,7 @@ func (h *FeishuHandler) Callback(c *gin.Context) {
 	}
 	h.audit(c, &res.UserID, biz.AuditLoginFeishu, res.Username, nil)
 	// 与密码登录写同一个会话 cookie，后续 AuthMiddleware/WS/MCP/前端守卫自动生效。
-	c.SetCookie(biz.SessionCookieName, res.SessionID, 7*24*3600, "/", "", false, true)
+	setSessionCookie(c, biz.SessionCookieName, res.SessionID, 7*24*3600)
 	c.Redirect(http.StatusFound, "/")
 }
 

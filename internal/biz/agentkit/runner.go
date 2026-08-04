@@ -93,15 +93,35 @@ type ImageInput struct {
 // history 为会话历史（不含本次输入），用于多轮对话。
 // tracer 可选：非 nil 时上报 Langfuse。
 func Run(ctx context.Context, ag adk.TypedAgent[*schema.AgenticMessage], history []*schema.AgenticMessage, in *Input, cb *RunCallbacks, tracer *Tracer, userID, sessionID string) (*RunResult, error) {
+	return run(ctx, ag, history, in, cb, tracer, userID, sessionID, true)
+}
+
+// RunWithMemoryHistory 控制是否由记忆 Provider 注入会话历史。
+// 关闭时用于会话摘要模式，避免把已摘要的业务历史再次传入模型。
+func RunWithMemoryHistory(ctx context.Context, ag adk.TypedAgent[*schema.AgenticMessage], history []*schema.AgenticMessage, in *Input, cb *RunCallbacks, tracer *Tracer, userID, sessionID string, useMemoryHistory bool) (*RunResult, error) {
+	return run(ctx, ag, history, in, cb, tracer, userID, sessionID, useMemoryHistory)
+}
+
+func run(ctx context.Context, ag adk.TypedAgent[*schema.AgenticMessage], history []*schema.AgenticMessage, in *Input, cb *RunCallbacks, tracer *Tracer, userID, sessionID string, useMemoryHistory bool) (*RunResult, error) {
 	runner := adk.NewTypedRunner(adk.TypedRunnerConfig[*schema.AgenticMessage]{Agent: ag})
 
 	msgs := make([]*schema.AgenticMessage, 0, len(history)+1)
-	msgs = append(msgs, history...)
+	if useMemoryHistory {
+		msgs = append(msgs, history...)
+	}
 	msgs = append(msgs, buildUserMessage(in))
 
 	var opts []adk.AgentRunOption
+	opts = append(opts, adk.WithSessionValues(map[string]any{
+		"userID":           userID,
+		"sessionID":        sessionID,
+		"businessHistory":  history,
+		"useMemoryHistory": useMemoryHistory,
+	}))
 	if tracer != nil {
-		ctx, opts = tracer.runOptions(ctx, userID, sessionID, "agent-chat")
+		var traceOpts []adk.AgentRunOption
+		ctx, traceOpts = tracer.runOptions(ctx, userID, sessionID, "agent-chat")
+		opts = append(opts, traceOpts...)
 	}
 
 	iter := runner.Run(ctx, msgs, opts...)

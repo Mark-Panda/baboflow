@@ -114,6 +114,9 @@ func (s *stubAuthRepo) DeleteSession(ctx context.Context, id string) error {
 	delete(s.sessions, id)
 	return nil
 }
+func (s *stubAuthRepo) DeleteOtherSessions(ctx context.Context, userID int64, keepSessionID string) error {
+	return nil
+}
 
 func newMCPTestServer(token string, repo biz.AuthRepo) *gin.Engine {
 	r := gin.New()

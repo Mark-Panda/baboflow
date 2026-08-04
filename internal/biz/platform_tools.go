@@ -36,14 +36,26 @@ func NewPlatformTools(deps *PlatformDeps) *PlatformTools {
 
 // Tools 返回全部平台工具。
 func (p *PlatformTools) Tools() ([]tool.BaseTool, error) {
+	return p.tools(true)
+}
+
+// ToolsForAgent 返回指定 Agent 可用的平台工具。
+// SKILL 反生成器由外层统一保存结果，不暴露 skill_create，避免重复写入。
+func (p *PlatformTools) ToolsForAgent(agentKey string) ([]tool.BaseTool, error) {
+	return p.tools(agentKey != "agent-skill-generator")
+}
+
+func (p *PlatformTools) tools(includeSkillCreate bool) ([]tool.BaseTool, error) {
 	var out []tool.BaseTool
 	builders := []func() (tool.InvokableTool, error){
 		p.searchComponentTool,
 		p.validateChainTool,
 		p.getChainTool,
 		p.createChainTool,
-		p.createSkillTool,
 		p.listPublishedChainsTool,
+	}
+	if includeSkillCreate {
+		builders = append(builders, p.createSkillTool)
 	}
 	for _, b := range builders {
 		t, err := b()

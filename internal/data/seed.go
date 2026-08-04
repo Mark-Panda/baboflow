@@ -41,30 +41,30 @@ func seedAdmin(db *gorm.DB, c *conf.Config) error {
 func seedBuiltinAgents(db *gorm.DB) error {
 	builtins := []po.Agent{
 		{
-			Key:       "agent-general",
-			Name:      "通用助手",
-			Instruction: "你是 BaboFlow 通用助手，可回答平台相关问题、编排规则链与 SKILL、调用各类工具完成任务。",
-			IsBuiltin: true,
-			SkillIDs:  datatypes.JSON([]byte("[]")),
-			McpIDs:    datatypes.JSON([]byte("[]")),
+			Key:          "agent-general",
+			Name:         "通用助手",
+			Instruction:  "你是 BaboFlow 通用助手，可回答平台相关问题、编排规则链与 SKILL、调用各类工具完成任务。",
+			IsBuiltin:    true,
+			SkillIDs:     datatypes.JSON([]byte("[]")),
+			McpIDs:       datatypes.JSON([]byte("[]")),
 			BuiltinTools: datatypes.JSON([]byte(`["bash","read","write","edit","grep"]`)),
 		},
 		{
-			Key:       "agent-chain-builder",
-			Name:      "规则链生成器",
-			Instruction: "你是规则链生成器。用 ReAct 模式：1) 理解用户需求 2) 调用 search_component 检索可用 RuleGo 组件 3) 与用户逐步确认细节 4) 产出合法 RuleGo 规则链 DSL 并调用 rulechain_validate/rulechain_create。",
-			IsBuiltin: true,
-			SkillIDs:  datatypes.JSON([]byte("[]")),
-			McpIDs:    datatypes.JSON([]byte("[]")),
+			Key:          "agent-chain-builder",
+			Name:         "规则链生成器",
+			Instruction:  "你是规则链生成器。用 ReAct 模式：1) 理解用户需求 2) 调用 search_component 检索可用 RuleGo 组件 3) 与用户逐步确认细节 4) 产出合法 RuleGo 规则链 DSL 并调用 rulechain_validate/rulechain_create。",
+			IsBuiltin:    true,
+			SkillIDs:     datatypes.JSON([]byte("[]")),
+			McpIDs:       datatypes.JSON([]byte("[]")),
 			BuiltinTools: datatypes.JSON([]byte(`["read","write","edit","grep"]`)),
 		},
 		{
-			Key:       "agent-skill-generator",
-			Name:      "SKILL 生成器",
-			Instruction: "你是 SKILL 生成器。读取已发布的规则链 DSL，反向生成标准 SKILL.md（name/description/何时使用/输入输出 schema/示例），并调用 skill_create 保存。",
-			IsBuiltin: true,
-			SkillIDs:  datatypes.JSON([]byte("[]")),
-			McpIDs:    datatypes.JSON([]byte("[]")),
+			Key:          "agent-skill-generator",
+			Name:         "SKILL 生成器",
+			Instruction:  "你是 SKILL 生成器。读取已发布的规则链 DSL，反向生成标准 SKILL.md（name/description/何时使用/输入输出 schema/示例）。只输出完整 SKILL.md，不要调用 skill_create 或其他保存工具，系统会在校验后统一保存。",
+			IsBuiltin:    true,
+			SkillIDs:     datatypes.JSON([]byte("[]")),
+			McpIDs:       datatypes.JSON([]byte("[]")),
 			BuiltinTools: datatypes.JSON([]byte(`["read","write","edit","grep"]`)),
 		},
 	}
@@ -75,6 +75,13 @@ func seedBuiltinAgents(db *gorm.DB) error {
 		}
 		if count == 0 {
 			if err := db.Create(&a).Error; err != nil {
+				return err
+			}
+		} else if a.Key == "agent-skill-generator" {
+			// 修正历史种子中的旧指令，避免 Agent 先调用 skill_create 导致
+			// 外层反生成接口报错但数据库已有半成品 SKILL。
+			if err := db.Model(&po.Agent{}).Where(`"key" = ?`, a.Key).
+				Update("instruction", a.Instruction).Error; err != nil {
 				return err
 			}
 		}

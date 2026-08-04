@@ -286,10 +286,10 @@ func (uc *SkillUsecase) GenerateFromChain(ctx context.Context, chainID string) (
 		return nil, errors.New("仅已发布规则链可生成 SKILL")
 	}
 	text, err := uc.genRunner(ctx, chainID, c.Name, c.Description, c.InputSchema, c.DSL)
-	if err != nil {
+	md := extractSkillMarkdown(text)
+	if err != nil && md == "" {
 		return nil, err
 	}
-	md := extractSkillMarkdown(text)
 	if md == "" {
 		return nil, fmt.Errorf("Agent 未产出合法 SKILL.md；原始输出: %s", truncateRunes(text, 200))
 	}

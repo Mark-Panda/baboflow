@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	ErrBadCredential = errors.New("用户名或密码错误")
+	ErrBadCredential  = errors.New("用户名或密码错误")
 	ErrSessionExpired = errors.New("会话已过期")
 )
 
@@ -36,6 +36,7 @@ type AuthRepo interface {
 	FindSession(ctx context.Context, id string) (*po.Session, error)
 	TouchSession(ctx context.Context, id string, expiresAt time.Time) error
 	DeleteSession(ctx context.Context, id string) error
+	DeleteOtherSessions(ctx context.Context, userID int64, keepSessionID string) error
 }
 
 type AuthUsecase struct {
@@ -45,11 +46,11 @@ type AuthUsecase struct {
 func NewAuthUsecase(repo AuthRepo) *AuthUsecase { return &AuthUsecase{repo: repo} }
 
 type LoginResult struct {
-	UserID      int64  `json:"userId"`
-	Username    string `json:"username"`
-	DisplayName string `json:"displayName"`
-	MustChangePwd bool `json:"mustChangePwd"`
-	SessionID   string `json:"-"`
+	UserID        int64  `json:"userId"`
+	Username      string `json:"username"`
+	DisplayName   string `json:"displayName"`
+	MustChangePwd bool   `json:"mustChangePwd"`
+	SessionID     string `json:"-"`
 }
 
 func (uc *AuthUsecase) Login(ctx context.Context, username, password, ip, ua string) (*LoginResult, error) {
@@ -125,7 +126,7 @@ func (uc *AuthUsecase) Me(ctx context.Context, userID int64) (*po.AdminUser, err
 	return uc.repo.FindUserByID(ctx, userID)
 }
 
-func (uc *AuthUsecase) ChangePassword(ctx context.Context, userID int64, oldPwd, newPwd string) error {
+func (uc *AuthUsecase) ChangePassword(ctx context.Context, userID int64, oldPwd, newPwd, currentSessionID string) error {
 	user, err := uc.repo.FindUserByID(ctx, userID)
 	if err != nil {
 		return err
@@ -137,7 +138,10 @@ func (uc *AuthUsecase) ChangePassword(ctx context.Context, userID int64, oldPwd,
 	if err != nil {
 		return err
 	}
-	return uc.repo.UpdateUserPassword(ctx, userID, string(hash), false)
+	if err := uc.repo.UpdateUserPassword(ctx, userID, string(hash), false); err != nil {
+		return err
+	}
+	return uc.repo.DeleteOtherSessions(ctx, userID, currentSessionID)
 }
 
 func newSessionID() string {

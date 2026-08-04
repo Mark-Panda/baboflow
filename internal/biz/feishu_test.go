@@ -125,6 +125,14 @@ func (m *memAuthRepo) DeleteSession(ctx context.Context, id string) error {
 	delete(m.sessions, id)
 	return nil
 }
+func (m *memAuthRepo) DeleteOtherSessions(ctx context.Context, userID int64, keepSessionID string) error {
+	for id, s := range m.sessions {
+		if s.UserID == userID && id != keepSessionID {
+			delete(m.sessions, id)
+		}
+	}
+	return nil
+}
 
 func feishuTestConfig() *conf.Config {
 	return &conf.Config{

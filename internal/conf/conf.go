@@ -29,6 +29,11 @@ type Config struct {
 	LangfusePublicKey string
 	LangfuseSecretKey string
 
+	MemoryEnabled        bool // MEMORY_ENABLED: 是否启用 Agent 长期记忆
+	MemorySessionSummary bool // MEMORY_SESSION_SUMMARY: 是否启用会话摘要
+	MemoryEventSearch    bool // MEMORY_EVENT_SEARCH: 是否启用事件检索
+	MemoryLimit          int  // MEMORY_LIMIT: 每次检索注入的历史消息数
+
 	Workspace string // BABO_WORKSPACE: Agent 内置工具沙箱目录
 
 	ExecutorWorkers int      // EXECUTOR_WORKERS: 规则链执行并发
@@ -61,6 +66,11 @@ type fileConfig struct {
 	LangfuseHost      string `yaml:"langfuseHost"`
 	LangfusePublicKey string `yaml:"langfusePublicKey"`
 	LangfuseSecretKey string `yaml:"langfuseSecretKey"`
+
+	MemoryEnabled        *bool `yaml:"memoryEnabled"`
+	MemorySessionSummary *bool `yaml:"memorySessionSummary"`
+	MemoryEventSearch    *bool `yaml:"memoryEventSearch"`
+	MemoryLimit          int   `yaml:"memoryLimit"`
 
 	Workspace string `yaml:"workspace"`
 
@@ -128,6 +138,11 @@ func LoadWithFile(path string) *Config {
 		LangfusePublicKey: pick("LANGFUSE_PUBLIC_KEY", fc.LangfusePublicKey, ""),
 		LangfuseSecretKey: pick("LANGFUSE_SECRET_KEY", fc.LangfuseSecretKey, ""),
 
+		MemoryEnabled:        pickBoolPtr("MEMORY_ENABLED", fc.MemoryEnabled, true),
+		MemorySessionSummary: pickBoolPtr("MEMORY_SESSION_SUMMARY", fc.MemorySessionSummary, false),
+		MemoryEventSearch:    pickBoolPtr("MEMORY_EVENT_SEARCH", fc.MemoryEventSearch, false),
+		MemoryLimit:          pickInt("MEMORY_LIMIT", fc.MemoryLimit, 20),
+
 		Workspace: pick("BABO_WORKSPACE", fc.Workspace, "./workspace"),
 
 		ExecutorWorkers: pickInt("EXECUTOR_WORKERS", fc.ExecutorWorkers, 8),
@@ -192,6 +207,16 @@ func pickBool(envKey string, fileVal, def bool) bool {
 	}
 	if fileVal {
 		return true
+	}
+	return def
+}
+
+func pickBoolPtr(envKey string, fileVal *bool, def bool) bool {
+	if v := os.Getenv(envKey); v != "" {
+		return v == "1" || strings.EqualFold(v, "true")
+	}
+	if fileVal != nil {
+		return *fileVal
 	}
 	return def
 }

@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -453,6 +454,62 @@ func TestSkillDownloadPackage(t *testing.T) {
 	if !bytes.Equal(data, z) {
 		t.Fatal("expected download bytes == uploaded zip")
 	}
+}
+
+func TestGenerateFromChainPersistsMarkdownAfterRunnerError(t *testing.T) {
+	uc, repo, _ := skillUsecaseForTest(t)
+	chains := NewRuleChainUsecase(&stubGenerateChainRepo{
+		chain: &po.RuleChain{
+			ID: "chain-1", Name: "测试链", Status: "published",
+			InputSchema: []byte(`{"type":"object"}`), DSL: []byte(`{"nodes":[]}`),
+		},
+	}, nil)
+	uc.SetChains(chains)
+	uc.SetGenRunner(func(context.Context, string, string, string, []byte, []byte) (string, error) {
+		return testSkillMD, errors.New("agent 收尾失败")
+	})
+
+	view, err := uc.GenerateFromChain(context.Background(), "chain-1")
+	if err != nil {
+		t.Fatalf("expected partial markdown to be persisted, got %v", err)
+	}
+	if view.Source != "chain" || view.ChainID != "chain-1" {
+		t.Fatalf("unexpected generated skill metadata: source=%q chainId=%q", view.Source, view.ChainID)
+	}
+	if repo.byName[view.Name].ChainID != "chain-1" {
+		t.Fatalf("expected persisted chain id, got %q", repo.byName[view.Name].ChainID)
+	}
+}
+
+type stubGenerateChainRepo struct {
+	chain *po.RuleChain
+}
+
+func (r *stubGenerateChainRepo) Create(context.Context, *po.RuleChain) error { return nil }
+func (r *stubGenerateChainRepo) Update(context.Context, *po.RuleChain) error { return nil }
+func (r *stubGenerateChainRepo) Get(context.Context, string) (*po.RuleChain, error) {
+	return r.chain, nil
+}
+func (r *stubGenerateChainRepo) List(context.Context, string, string, int, int) ([]po.RuleChain, int64, error) {
+	return nil, 0, nil
+}
+func (r *stubGenerateChainRepo) Delete(context.Context, string) error { return nil }
+func (r *stubGenerateChainRepo) CreateVersion(context.Context, *po.RuleChainVersion) error {
+	return nil
+}
+func (r *stubGenerateChainRepo) ListVersions(context.Context, string) ([]po.RuleChainVersion, error) {
+	return nil, nil
+}
+func (r *stubGenerateChainRepo) GetVersion(context.Context, string, int) (*po.RuleChainVersion, error) {
+	return nil, nil
+}
+func (r *stubGenerateChainRepo) CreateRun(context.Context, *po.ChainRun) error { return nil }
+func (r *stubGenerateChainRepo) UpdateRun(context.Context, *po.ChainRun) error { return nil }
+func (r *stubGenerateChainRepo) ListRuns(context.Context, string, string, int, int) ([]po.ChainRun, int64, error) {
+	return nil, 0, nil
+}
+func (r *stubGenerateChainRepo) GetRun(context.Context, int64) (*po.ChainRun, error) {
+	return nil, nil
 }
 
 func TestReadZipEntryRejectsActualOversize(t *testing.T) {

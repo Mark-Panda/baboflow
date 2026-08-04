@@ -11,6 +11,7 @@ import (
 	"github.com/go-kratos/kratos/v2/middleware/tracing"
 	khttp "github.com/go-kratos/kratos/v2/transport/http"
 	"github.com/joho/godotenv"
+	"gorm.io/gorm"
 
 	"baboflow/internal/biz"
 	"baboflow/internal/biz/agentkit"
@@ -29,6 +30,7 @@ type App struct {
 	HTTPServer *khttp.Server
 
 	Cfg           *conf.Config
+	DB            *gorm.DB
 	ChainUC       *biz.RuleChainUsecase
 	McpUC         *biz.McpUsecase
 	CronUC        *biz.CronUsecase
@@ -57,6 +59,7 @@ type App struct {
 func newApp(
 	httpSrv *khttp.Server,
 	c *conf.Config,
+	db *gorm.DB,
 	chainUC *biz.RuleChainUsecase,
 	mcpUC *biz.McpUsecase,
 	cronUC *biz.CronUsecase,
@@ -64,6 +67,7 @@ func newApp(
 	skillUC *biz.SkillUsecase,
 	archeryUC *biz.ArcheryUsecase,
 	auditUC *biz.AuditUsecase,
+	agentUC *biz.AgentUsecase,
 	agentManager *agentkit.Manager,
 	eng *rulegokit.Manager,
 	compSync *biz.ComponentSync,
@@ -79,8 +83,8 @@ func newApp(
 	mcpH *service.McpHandler,
 	boardH *service.BoardHandler,
 ) *App {
-	return &App{
-		HTTPServer: httpSrv, Cfg: c,
+	app := &App{
+		HTTPServer: httpSrv, Cfg: c, DB: db,
 		ChainUC: chainUC, McpUC: mcpUC, CronUC: cronUC, BoardUC: boardUC,
 		SkillUC: skillUC, ArcheryUC: archeryUC, AuditUC: auditUC,
 		AgentManager: agentManager, Eng: eng, CompSync: compSync, CompRepo: compRepo,
@@ -89,6 +93,9 @@ func newApp(
 		FeishuH: feishuH,
 		SkillH:  skillH, McpH: mcpH, BoardH: boardH,
 	}
+	agentManager.SetMemoryDB(db, c)
+	agentUC.SetSessionMemoryCleaner(agentManager)
+	return app
 }
 
 func main() {
@@ -125,6 +132,7 @@ func main() {
 			app.CronUC.Stop()
 			app.BoardUC.Stop()
 			app.Eng.StopAll()
+			_ = app.AgentManager.Close()
 			return nil
 		}),
 	)
@@ -146,6 +154,11 @@ func injectRuntime(app *App, helper *log.Helper) {
 		}
 		res, err := agentkit.Run(ctx, ag, nil, &agentkit.Input{Text: prompt}, nil, app.Tracer, "", "bg-"+agentKey)
 		if err != nil {
+			// Agent 可能已经产出完整文本，只是在收尾事件中报错；
+			// 反生成流程仍可对这段文本做校验和统一保存。
+			if res != nil && res.Text != "" {
+				return res.Text, err
+			}
 			return "", err
 		}
 		return res.Text, nil
@@ -164,7 +177,7 @@ func injectRuntime(app *App, helper *log.Helper) {
 	// SKILL 生成器：把规则链信息喂给内置 agent-skill-generator，产出 SKILL.md。
 	app.SkillUC.SetGenRunner(func(ctx context.Context, chainID, chainName, chainDesc string, inputSchema, dsl []byte) (string, error) {
 		prompt := fmt.Sprintf(
-			"请为以下已发布规则链生成标准 SKILL.md 并调用 skill_create 保存。\n规则链ID: %s\n名称: %s\n描述: %s\n输入 schema: %s\n规则链 DSL:\n%s",
+			"请为以下已发布规则链生成标准 SKILL.md。只输出完整 SKILL.md，不要调用 skill_create 或其他保存工具，系统会在校验后统一保存。\n规则链ID: %s\n名称: %s\n描述: %s\n输入 schema: %s\n规则链 DSL:\n%s",
 			chainID, chainName, chainDesc, string(inputSchema), string(dsl),
 		)
 		return runAgent(ctx, "agent-skill-generator", prompt)
@@ -172,7 +185,7 @@ func injectRuntime(app *App, helper *log.Helper) {
 
 	// 平台工具（检索组件 / 校验·查询·创建规则链 / 创建 SKILL）注入 Agent。
 	app.AgentManager.SetExtraToolFactory(func(ctx context.Context, sessionID string, a *po.Agent) ([]tool.BaseTool, error) {
-		return app.PlatformTools.Tools()
+		return app.PlatformTools.ToolsForAgent(a.Key)
 	})
 
 	// 含技能包的技能：取技能时确保已解压落盘，把目录喂给 eino BaseDirectory，

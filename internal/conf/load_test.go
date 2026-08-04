@@ -94,3 +94,28 @@ func TestLoad_DefaultPathEnvOverride(t *testing.T) {
 		t.Fatalf("expected BABO_CONFIG path to be honored, got %q", got)
 	}
 }
+
+func TestLoad_MemoryConfig(t *testing.T) {
+	cfg := LoadWithFile(filepath.Join(t.TempDir(), "nope.yaml"))
+	if !cfg.MemoryEnabled || cfg.MemorySessionSummary || cfg.MemoryEventSearch || cfg.MemoryLimit != 20 {
+		t.Fatalf("unexpected memory defaults: %+v", cfg)
+	}
+
+	t.Setenv("MEMORY_ENABLED", "false")
+	t.Setenv("MEMORY_SESSION_SUMMARY", "false")
+	t.Setenv("MEMORY_EVENT_SEARCH", "true")
+	t.Setenv("MEMORY_LIMIT", "8")
+	cfg = LoadWithFile("")
+	if cfg.MemoryEnabled || cfg.MemorySessionSummary || !cfg.MemoryEventSearch || cfg.MemoryLimit != 8 {
+		t.Fatalf("environment variables should override memory config: %+v", cfg)
+	}
+
+	p := writeTempConfig(t, "memoryEnabled: false\nmemorySessionSummary: false\nmemoryEventSearch: true\n")
+	t.Setenv("MEMORY_ENABLED", "")
+	t.Setenv("MEMORY_SESSION_SUMMARY", "")
+	t.Setenv("MEMORY_EVENT_SEARCH", "")
+	cfg = LoadWithFile(p)
+	if cfg.MemoryEnabled || cfg.MemorySessionSummary || !cfg.MemoryEventSearch {
+		t.Fatalf("explicit false values from file should be honored: %+v", cfg)
+	}
+}

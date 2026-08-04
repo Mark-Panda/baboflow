@@ -54,6 +54,7 @@ type AgentUsecase struct {
 	cfg     *conf.Config
 	assets  AssetStore
 	tracer  *agentkit.Tracer
+	memory  SessionMemoryCleaner
 }
 
 // AssetStore 抽象会话附件的落盘（本地实现于 data 层）。
@@ -63,8 +64,17 @@ type AssetStore interface {
 	DeleteBySession(sessionID string) error
 }
 
+// SessionMemoryCleaner 清理指定用户会话在记忆存储中的会话数据。
+type SessionMemoryCleaner interface {
+	DeleteSessionData(ctx context.Context, userID, sessionID string) error
+}
+
 func NewAgentUsecase(repo AgentDataRepo, manager *agentkit.Manager, c *conf.Config, assets AssetStore, tracer *agentkit.Tracer) *AgentUsecase {
 	return &AgentUsecase{repo: repo, manager: manager, cfg: c, assets: assets, tracer: tracer}
+}
+
+func (uc *AgentUsecase) SetSessionMemoryCleaner(cleaner SessionMemoryCleaner) {
+	uc.memory = cleaner
 }
 
 // ---- Agent CRUD ----
@@ -252,6 +262,11 @@ func (uc *AgentUsecase) DeleteSession(ctx context.Context, id string, userID int
 	if s.UserID != nil && *s.UserID != userID {
 		return ErrNotFound
 	}
+	if uc.memory != nil {
+		if err := uc.memory.DeleteSessionData(ctx, int64ToStr(userID), id); err != nil {
+			return err
+		}
+	}
 	if err := uc.repo.DeleteSession(ctx, id); err != nil {
 		return err
 	}
@@ -280,6 +295,12 @@ func (uc *AgentUsecase) ownSession(ctx context.Context, sessionID string, userID
 	return s, nil
 }
 
+// ValidateSessionAccess 校验用户是否有权访问指定会话，供 WebSocket 订阅鉴权使用。
+func (uc *AgentUsecase) ValidateSessionAccess(ctx context.Context, sessionID string, userID int64) error {
+	_, err := uc.ownSession(ctx, sessionID, userID)
+	return err
+}
+
 // ---- 对话 ----
 
 // ChatAttachment 前端随消息上传的附件（已落盘的 asset id）。
@@ -295,6 +316,15 @@ func (uc *AgentUsecase) Chat(ctx context.Context, sessionID, text string, atts [
 	if err != nil {
 		return nil, err
 	}
+	historyLimit := 50
+	if uc.cfg != nil && uc.cfg.MemoryEnabled && uc.cfg.MemoryLimit > 0 {
+		historyLimit = uc.cfg.MemoryLimit
+	}
+	historyRows, err := uc.repo.ListMessages(ctx, sessionID, historyLimit)
+	if err != nil {
+		return nil, err
+	}
+	history := agentHistory(historyRows)
 
 	// 构建多模态输入（图片附件 → ImageInput）
 	in := &agentkit.Input{Text: text}
@@ -302,6 +332,9 @@ func (uc *AgentUsecase) Chat(ctx context.Context, sessionID, text string, atts [
 	for _, at := range atts {
 		asset, err := uc.repo.GetAsset(ctx, at.AssetID)
 		if err != nil {
+			continue
+		}
+		if !allowAssetForSession(asset, sessionID) {
 			continue
 		}
 		if isImageMime(asset.Mime) {
@@ -327,18 +360,13 @@ func (uc *AgentUsecase) Chat(ctx context.Context, sessionID, text string, atts [
 		return nil, err
 	}
 
-	// 重建历史（不含刚写入的这条）
-	history, err := uc.buildHistory(ctx, sessionID)
-	if err != nil {
-		return nil, err
-	}
-
 	// 运行 agent
 	ag, err := uc.manager.Get(ctx, sess.AgentKey)
 	if err != nil {
 		return nil, err
 	}
-	res, err := agentkit.Run(ctx, ag, history, in, &agentkit.RunCallbacks{OnEvent: onEvent}, uc.tracer, int64ToStr(userID), sessionID)
+	useMemoryHistory := uc.cfg == nil || !uc.cfg.MemoryEnabled || !uc.cfg.MemorySessionSummary
+	res, err := agentkit.RunWithMemoryHistory(ctx, ag, history, in, &agentkit.RunCallbacks{OnEvent: onEvent}, uc.tracer, int64ToStr(userID), sessionID, useMemoryHistory)
 	if err != nil {
 		// 仍把失败以 assistant 消息形式留痕
 		_ = uc.repo.CreateMessage(ctx, &po.AgentMessage{
@@ -371,27 +399,22 @@ func (uc *AgentUsecase) Chat(ctx context.Context, sessionID, text string, atts [
 	return res, nil
 }
 
-// buildHistory 把会话历史消息重建为 AgenticMessage 序列（多轮上下文）。
-func (uc *AgentUsecase) buildHistory(ctx context.Context, sessionID string) ([]*schema.AgenticMessage, error) {
-	msgs, err := uc.repo.ListMessages(ctx, sessionID, 50)
-	if err != nil {
-		return nil, err
-	}
-	var out []*schema.AgenticMessage
-	for _, m := range msgs {
-		switch m.Role {
+func agentHistory(rows []po.AgentMessage) []*schema.AgenticMessage {
+	history := make([]*schema.AgenticMessage, 0, len(rows))
+	for _, row := range rows {
+		switch row.Role {
 		case "user":
-			out = append(out, schema.UserAgenticMessage(m.Content))
+			history = append(history, schema.UserAgenticMessage(row.Content))
 		case "assistant":
-			out = append(out, &schema.AgenticMessage{
+			history = append(history, &schema.AgenticMessage{
 				Role: schema.AgenticRoleTypeAssistant,
 				ContentBlocks: []*schema.ContentBlock{
-					schema.NewContentBlock(&schema.AssistantGenText{Text: m.Content}),
+					schema.NewContentBlock(&schema.AssistantGenText{Text: row.Content}),
 				},
 			})
 		}
 	}
-	return out, nil
+	return history
 }
 
 // ---- 附件 ----
@@ -458,6 +481,10 @@ func (uc *AgentUsecase) GetAssetData(ctx context.Context, id int64, userID int64
 }
 
 func isImageMime(m string) bool { return strings.HasPrefix(m, "image/") }
+
+func allowAssetForSession(asset *po.Asset, sessionID string) bool {
+	return asset != nil && asset.SessionID == sessionID
+}
 
 func base64Encode(b []byte) string { return base64.StdEncoding.EncodeToString(b) }
 

@@ -15,6 +15,8 @@ type AgentHandler struct {
 	uc *biz.AgentUsecase
 }
 
+const maxAssetUploadBytes = 20 << 20
+
 func NewAgentHandler(uc *biz.AgentUsecase) *AgentHandler {
 	return &AgentHandler{uc: uc}
 }
@@ -145,15 +147,23 @@ func (h *AgentHandler) UploadAsset(c *gin.Context) {
 		httputil.BadRequest(c, "缺少文件: "+err.Error())
 		return
 	}
+	if fh.Size > maxAssetUploadBytes {
+		httputil.BadRequest(c, "文件超过 20MB 上限")
+		return
+	}
 	f, err := fh.Open()
 	if err != nil {
 		httputil.Internal(c, err.Error())
 		return
 	}
 	defer f.Close()
-	data, err := io.ReadAll(f)
+	data, err := io.ReadAll(io.LimitReader(f, maxAssetUploadBytes+1))
 	if err != nil {
 		httputil.Internal(c, err.Error())
+		return
+	}
+	if len(data) > maxAssetUploadBytes {
+		httputil.BadRequest(c, "文件超过 20MB 上限")
 		return
 	}
 	asset, err := h.uc.SaveAsset(c.Request.Context(), sessionID, fh.Filename, data, CurrentUserID(c))

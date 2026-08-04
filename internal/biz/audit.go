@@ -21,6 +21,9 @@ type AuditUsecase struct {
 	repo AuditDataRepo
 }
 
+// auditSlots 限制异步审计写入的并发量，避免高流量下每个请求创建一个 goroutine。
+var auditSlots = make(chan struct{}, 128)
+
 func NewAuditUsecase(repo AuditDataRepo) *AuditUsecase {
 	return &AuditUsecase{repo: repo}
 }
@@ -42,7 +45,15 @@ func (uc *AuditUsecase) Record(ctx context.Context, userID *int64, action, targe
 		TargetID: targetID, Detail: dj, IP: ip,
 	}
 	// 异步写，避免阻塞请求；失败仅静默（审计不应拖垮业务）。
+	select {
+	case auditSlots <- struct{}{}:
+	default:
+		// 审计记录不可静默丢失：并发达到上限时回退为当前请求同步写入。
+		_ = uc.repo.Create(context.WithoutCancel(ctx), e)
+		return
+	}
 	go func() {
+		defer func() { <-auditSlots }()
 		_ = uc.repo.Create(context.WithoutCancel(ctx), e)
 	}()
 }

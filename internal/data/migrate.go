@@ -5,6 +5,7 @@ import (
 
 	"baboflow/internal/conf"
 	"baboflow/internal/data/po"
+	"baboflow/internal/memorystore"
 
 	"gorm.io/gorm"
 )
@@ -42,6 +43,13 @@ func Migrate(db *gorm.DB, c *conf.Config) error {
 	}
 	if err := db.AutoMigrate(models...); err != nil {
 		return fmt.Errorf("auto migrate: %w", err)
+	}
+	memoryStorage, err := memorystore.NewPostgresStorage(db)
+	if err != nil {
+		return fmt.Errorf("create memory storage: %w", err)
+	}
+	if err := memoryStorage.AutoMigrate(); err != nil {
+		return fmt.Errorf("memory auto migrate: %w", err)
 	}
 	// 调整向量列维度（默认 pgvector-go 不定维度；按配置设为 vector(dim)）。
 	if c.EmbeddingDim > 0 {

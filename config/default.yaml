@@ -27,6 +27,13 @@ langfuseHost: ""
 langfusePublicKey: ""
 langfuseSecretKey: ""
 
+# Agent 记忆模块（默认启用，使用现有 PostgreSQL 持久化）
+memoryEnabled: true
+# 会话摘要会额外调用 LLM，按需开启
+memorySessionSummary: false
+memoryEventSearch: false
+memoryLimit: 20
+
 # Agent 内置工具沙箱目录
 workspace: "./workspace"
 

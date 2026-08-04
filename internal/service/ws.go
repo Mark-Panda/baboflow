@@ -3,8 +3,12 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
+	"net/url"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -35,8 +39,24 @@ type wsInbound struct {
 var wsUpgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
 	WriteBufferSize: 4096,
-	// 同源 cookie 鉴权，开发期 vite 代理。生产同源部署，放宽 origin。
-	CheckOrigin: func(r *http.Request) bool { return true },
+	// 仅允许同主机 Origin；无 Origin 时兼容非浏览器 WebSocket 客户端。
+	CheckOrigin: sameHostOrigin,
+}
+
+func sameHostOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+	u, err := url.Parse(origin)
+	if err != nil || u.Hostname() == "" {
+		return false
+	}
+	requestHost := r.Host
+	if host, _, splitErr := net.SplitHostPort(requestHost); splitErr == nil {
+		requestHost = host
+	}
+	return strings.EqualFold(u.Hostname(), requestHost)
 }
 
 // WsHub 管理全部 WS 连接，按 sessionID 路由 agent-chat 事件。
@@ -44,21 +64,25 @@ type WsHub struct {
 	agentUC *biz.AgentUsecase
 	auth    *biz.AuthUsecase
 
-	mu     sync.RWMutex
-	bySess map[string]map[*wsConn]bool // sessionID → 连接集
+	mu        sync.RWMutex
+	bySess    map[string]map[*wsConn]bool // sessionID → 连接集
+	conns     int
+	chatSlots chan struct{}
 }
 
 type wsConn struct {
 	conn   *websocket.Conn
 	userID int64
+	ctx    context.Context
 	mu     sync.Mutex // 写串行化
 }
 
 func NewWsHub(agentUC *biz.AgentUsecase, auth *biz.AuthUsecase) *WsHub {
 	return &WsHub{
-		agentUC: agentUC,
-		auth:    auth,
-		bySess:  map[string]map[*wsConn]bool{},
+		agentUC:   agentUC,
+		auth:      auth,
+		bySess:    map[string]map[*wsConn]bool{},
+		chatSlots: make(chan struct{}, 32),
 	}
 }
 
@@ -78,11 +102,29 @@ func (h *WsHub) Handle(c *gin.Context) {
 	if err != nil {
 		return
 	}
-	wc := &wsConn{conn: conn, userID: user.ID}
+	h.mu.Lock()
+	if h.conns >= 128 {
+		h.mu.Unlock()
+		_ = conn.Close()
+		return
+	}
+	h.conns++
+	h.mu.Unlock()
+	wc := &wsConn{conn: conn, userID: user.ID, ctx: c.Request.Context()}
 	biz.WsConnections.Inc()
 	defer biz.WsConnections.Dec()
+	defer func() {
+		h.mu.Lock()
+		h.conns--
+		h.mu.Unlock()
+	}()
 	defer h.cleanup(wc)
 
+	conn.SetReadLimit(1 << 20)
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Minute))
+	conn.SetPongHandler(func(string) error {
+		return conn.SetReadDeadline(time.Now().Add(2 * time.Minute))
+	})
 	for {
 		_, raw, err := conn.ReadMessage()
 		if err != nil {
@@ -110,9 +152,12 @@ func (h *WsHub) dispatch(wc *wsConn, in *wsInbound) {
 	}
 }
 
-func (h *WsHub) subscribe(sessionID string, wc *wsConn) {
+func (h *WsHub) subscribe(sessionID string, wc *wsConn) bool {
 	if sessionID == "" {
-		return
+		return false
+	}
+	if err := h.agentUC.ValidateSessionAccess(wc.ctx, sessionID, wc.userID); err != nil {
+		return false
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -120,6 +165,7 @@ func (h *WsHub) subscribe(sessionID string, wc *wsConn) {
 		h.bySess[sessionID] = map[*wsConn]bool{}
 	}
 	h.bySess[sessionID][wc] = true
+	return true
 }
 
 func (h *WsHub) unsubscribe(sessionID string, wc *wsConn) {
@@ -159,6 +205,7 @@ func (h *WsHub) broadcast(sessionID string, frame *WsFrame) {
 	h.mu.RUnlock()
 	for _, wc := range conns {
 		wc.mu.Lock()
+		_ = wc.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 		_ = wc.conn.WriteJSON(frame)
 		wc.mu.Unlock()
 	}
@@ -170,7 +217,9 @@ func (h *WsHub) handleChatInput(wc *wsConn, in *wsInbound) {
 		return
 	}
 	// 校验订阅，未订阅则先订阅（容错）
-	h.subscribe(in.SessionID, wc)
+	if !h.subscribe(in.SessionID, wc) {
+		return
+	}
 
 	atts := make([]biz.ChatAttachment, 0, len(in.AssetIDs))
 	for _, id := range in.AssetIDs {
@@ -182,8 +231,19 @@ func (h *WsHub) handleChatInput(wc *wsConn, in *wsInbound) {
 	}
 
 	// 异步执行，避免阻塞该连接的读循环（支持并发订阅其它会话）
+	select {
+	case h.chatSlots <- struct{}{}:
+	default:
+		h.broadcast(in.SessionID, &WsFrame{
+			Channel: "agent-chat",
+			Type:    "error",
+			Data:    map[string]any{"sessionId": in.SessionID, "err": "当前并发对话数已达上限"},
+		})
+		return
+	}
 	go func() {
-		_, err := h.agentUC.Chat(context.Background(), in.SessionID, in.Content, atts, wc.userID, onEvent)
+		defer func() { <-h.chatSlots }()
+		_, err := h.agentUC.Chat(wc.ctx, in.SessionID, in.Content, atts, wc.userID, onEvent)
 		if err != nil {
 			h.broadcast(in.SessionID, &WsFrame{
 				Channel: "agent-chat",
