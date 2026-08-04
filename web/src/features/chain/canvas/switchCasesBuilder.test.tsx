@@ -79,25 +79,24 @@ describe('SwitchCasesBuilder 每个条件独立运算符（受控回环不塌缩
     expect(shown[1]).toContain('小于');
   });
 
-  it('两行布局：行1 含运算符下拉（占满整行,始终可见），行2 为左右值输入框', async () => {
+  it('单行布局：运算符内嵌在左值输入框后，左/右值同一行', async () => {
     render(
       <Harness
         initial={[{ case: 'msg.temperature == 20 && msg.temperature < 50', then: 'Case1' }]}
         onSpy={() => {}}
       />
     );
-    // 两个条件 → 两个 .bf-switch-rule，每个规则块内行1 有且仅有一个 .bf-switch-op
+    // 两个条件 → 两个 .bf-switch-rule，每个规则内一个 .bf-switch-op（内嵌在左值后）
     const rules = Array.from(window.document.querySelectorAll('.bf-switch-rule'));
     expect(rules.length).toBe(2);
     const ops = opSelects();
     expect(ops.length).toBe(2);
-    rules.forEach((rule, idx) => {
-      // 运算符下拉在该规则块的「行1」(bf-switch-rule-top) 内，不被裁掉
-      const top = rule.querySelector('.bf-switch-rule-top');
-      expect(top).not.toBeNull();
-      expect(top!.contains(ops[idx])).toBe(true);
-      // 行2 (bf-switch-rule-io) 含左右输入框
-      expect(rule.querySelector('.bf-switch-rule-io .bf-switch-left')).not.toBeNull();
+    rules.forEach((rule) => {
+      // 左值输入框承载运算符（addonAfter 内嵌 .bf-switch-op）
+      const left = rule.querySelector('.bf-switch-left');
+      expect(left).not.toBeNull();
+      expect(left!.querySelector('.bf-switch-op')).not.toBeNull();
+      // 同一行 (bf-switch-rule-io) 内含左右值输入框
       expect(rule.querySelector('.bf-switch-rule-io .bf-switch-right')).not.toBeNull();
     });
     // 两个条件各自显示自己的运算符文本
@@ -150,5 +149,32 @@ describe('SwitchCasesBuilder 每个条件独立运算符（受控回环不塌缩
       />
     );
     expect(opSelects()[0].textContent).toContain('小于');
+  });
+
+  it('「添加 OR 条件」新增的行 join 为 ||（独立 OR 组，表达式含 ||）', () => {
+    const spy = vi.fn();
+    render(<Harness initial={[{ case: '', then: 'Case1' }]} onSpy={spy} />);
+
+    // 初始 1 条 → 点「添加 OR 条件」→ 应变 2 条
+    expect(opSelects().length).toBe(1);
+    fireEvent.click(screen.getByRole('button', { name: '添加 OR 条件' }));
+    expect(opSelects().length).toBe(2);
+
+    // 新行 join 必须是 ||，生成的表达式含 ||（否则被并进同一 AND 组、视觉无变化）
+    const emitted = spy.mock.calls[spy.mock.calls.length - 1][0] as SwitchCaseItem[];
+    expect(emitted[0].case).toContain('||');
+  });
+
+  it('「添加条件」新增的行 join 为 &&（并入当前 AND 组，表达式含 &&）', () => {
+    const spy = vi.fn();
+    render(<Harness initial={[{ case: '', then: 'Case1' }]} onSpy={spy} />);
+
+    expect(opSelects().length).toBe(1);
+    fireEvent.click(screen.getByRole('button', { name: /(?<!OR )添加条件$/ }));
+    expect(opSelects().length).toBe(2);
+
+    const emitted = spy.mock.calls[spy.mock.calls.length - 1][0] as SwitchCaseItem[];
+    expect(emitted[0].case).toContain('&&');
+    expect(emitted[0].case).not.toContain('||');
   });
 });

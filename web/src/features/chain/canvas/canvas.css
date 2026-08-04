@@ -266,18 +266,146 @@
 }
 
 .bf-config {
-  flex: 0 0 480px;
-  width: 480px;
-  min-width: 480px;
+  flex: 0 1 460px;
+  width: 460px;
+  min-width: 380px;
+  max-width: 640px;
   border-left: 1px solid #eef0f5;
   background: #fff;
+  /* 右栏容器：自身不滚动（调试控制台 + 节点设置两个子区各自滚动），resize 手柄可拖宽 */
+  overflow: hidden;
+  resize: horizontal;
+}
+/* 节点设置面板：填充父容器（右栏列），可独立滚动 */
+.bf-config-panel {
+  width: 100%;
+  height: 100%;
   overflow: auto;
+  background: #fff;
+}
+.bf-config-body {
+  padding: 14px;
+  min-width: 0;
 }
 .bf-config-empty {
   padding: 40px 20px;
   text-align: center;
   color: #a2a9bd;
   font-size: 13px;
+}
+
+/* 节点标题卡（只读组件信息） */
+.bf-config-head {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid #eef0f5;
+  border-radius: 8px;
+  background: #fafbfd;
+}
+.bf-config-head-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.bf-config-head-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1f2430;
+}
+.bf-config-head-type {
+  font-size: 11px;
+  color: #9aa0b4;
+  font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bf-config-head-desc {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
+/* 节点名称旁的节点 ID（只读可复制） */
+.bf-node-name-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+}
+.bf-node-id-chip {
+  font-size: 10px;
+  font-weight: 400;
+  font-family: monospace;
+  color: #9aa0b4;
+  background: #f4f5f9;
+  border: 1px solid #eceff5;
+  border-radius: 4px;
+  padding: 0 5px;
+  line-height: 1.6;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+/* 复制图标更小、贴边、不抢视觉 */
+.bf-node-id-chip .ant-typography-copy {
+  font-size: 10px;
+  color: #b6bccf;
+  margin-inline-start: 3px;
+}
+.bf-node-id-chip .ant-typography-copy:hover {
+  color: #4f6ef7;
+}
+
+/* 配置分组（长表单） */
+.bf-cfg-group {
+  margin-bottom: 6px;
+}
+.bf-cfg-group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 4px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: #4a5165;
+  text-align: left;
+  user-select: none;
+}
+.bf-cfg-group-head:hover {
+  color: #4f6ef7;
+}
+.bf-cfg-group-head-static {
+  cursor: default;
+}
+.bf-cfg-group-head-static:hover {
+  color: #4a5165;
+}
+.bf-cfg-group-count {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 400;
+  color: #a2a9bd;
+}
+.bf-cfg-group-body {
+  padding: 2px 0 4px;
+}
+
+/* 底部操作区：删除按钮小而靠左，不再又大又抢眼 */
+.bf-config-foot {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #f2f3f7;
+  display: flex;
+  justify-content: flex-start;
 }
 
 /* 编辑器顶栏 */
@@ -301,23 +429,36 @@
   background: #fff;
 }
 
-/* 配置区字段描述更紧凑 */
-.bf-config .ant-form-item {
+/* 配置区字段描述更紧凑、控件统一填满列宽且同高（作用于节点设置面板） */
+.bf-config-panel .ant-form-item {
   margin-bottom: 14px;
 }
+.bf-config-panel .ant-select,
+.bf-config-panel .ant-auto-complete,
+.bf-config-panel .ant-input-number,
+.bf-config-panel .ant-picker {
+  width: 100%;
+}
+/* 数字输入框与文本框视觉同宽（去掉默认窄宽度） */
+.bf-config-panel .ant-input-number {
+  display: inline-flex;
+}
+.bf-config-panel .ant-input-number .ant-input-number-input {
+  text-align: left;
+}
 
-/* ---- Switch 分支可视化构建器 ---- */
+/* ---- Switch 分支可视化构建器（左侧竖向导引条 + 单行两列） ---- */
 .bf-switch-branch {
   border: 1px solid #e8ebf3;
   border-radius: 8px;
-  padding: 8px;
+  padding: 8px 10px;
   margin-bottom: 10px;
   background: #fbfcfe;
 }
 .bf-switch-branch-head {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   margin-bottom: 8px;
 }
 .bf-switch-tag {
@@ -328,71 +469,104 @@
   background: #eef2ff;
   border: 1px solid #d9e2ff;
   border-radius: 5px;
-  padding: 1px 7px;
+  padding: 1px 8px;
   letter-spacing: 0.3px;
 }
 .bf-switch-then {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
   font-family: monospace;
 }
-.bf-switch-rules {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+/* 「添加 OR 条件」：分支头右侧的文字按钮 */
+.bf-switch-add-or {
+  flex: none;
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 12px;
+  color: #4f6ef7;
+  cursor: pointer;
+  white-space: nowrap;
 }
-/* 每条规则两行：行1=连接符+运算符(占满整行,始终完整可见)+删除；行2=左值+右值 各半。
-   两行都只占面板宽度，不再单行硬塞 → 多条件不横向溢出。 */
-.bf-switch-rule {
+.bf-switch-add-or:hover {
+  color: #3553d6;
+}
+
+/* 一个条件分组：左侧竖向导引条 + 组内规则行 */
+.bf-switch-cond {
   display: flex;
-  flex-direction: column;
-  gap: 5px;
+  align-items: stretch;
+  gap: 10px;
   min-width: 0;
-  padding: 6px;
-  border: 1px solid #eef0f5;
-  border-radius: 6px;
-  background: #fff;
 }
-.bf-switch-rule-top {
+.bf-switch-cond + .bf-switch-cond {
+  margin-top: 10px;
+}
+/* 竖向导引条：贯穿组内所有行，标记组内连接符 */
+.bf-switch-rail {
+  flex: none;
+  width: 42px;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 5px;
+  padding-top: 2px;
+  border-left: 2px solid #d9e2ff;
+  border-radius: 2px;
+  margin-left: 2px;
+}
+.bf-switch-join {
+  width: 100%;
+  color: #4a5165;
+  font-size: 11px;
+  font-weight: 600;
+}
+.bf-switch-join .ant-select-selector {
+  padding-inline-start: 6px !important;
+}
+.bf-switch-join-static {
+  font-size: 11px;
+  font-weight: 600;
+  color: #4a5165;
+  padding-left: 6px;
+}
+
+/* 组内规则行：单行 = [左值(内嵌运算符) | 右值 | 删除] */
+.bf-switch-rules {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bf-switch-rule {
   min-width: 0;
 }
 .bf-switch-rule-io {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   min-width: 0;
 }
-.bf-switch-join {
-  flex: none;
-  width: 44px;
-  text-align: center;
-  font-size: 11px;
-  color: #6b7280;
-}
-.bf-switch-join-first {
-  color: #a2a9bd;
-  padding-left: 2px;
-  text-align: left;
-}
-/* 运算符下拉：占满行1剩余宽度、可收缩，任何面板宽度下都完整可见 */
-.bf-switch-op {
-  flex: 1 1 0;
-  min-width: 0;
-}
-.bf-switch-op .ant-select-selector {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-/* 左值/右值输入框：平分行2，可收缩 */
+/* 左值 + 运算符（Space.Compact 融合为一体，运算符贴右缘）。Compact 需显式 flex 才能伸展。 */
 .bf-switch-left {
   flex: 1 1 0;
   min-width: 0;
+  display: flex;
+}
+.bf-switch-left .ant-input {
   font-family: monospace;
   font-size: 12px;
+}
+/* 运算符下拉：Compact 内最右段，左侧留一条分隔线 */
+.bf-switch-op {
+  flex: none;
+}
+.bf-switch-op .ant-select-selector {
+  padding: 0 4px 0 8px !important;
+  color: #6b7280;
+  font-size: 12px;
+  white-space: nowrap;
+  border-left: 1px solid #e8ebf3 !important;
 }
 .bf-switch-right {
   flex: 1 1 0;
@@ -403,12 +577,30 @@
 .bf-switch-rule .ant-btn {
   flex: none;
 }
+/* 「+ 添加 AND 条件」：组内底部文字链接 */
+.bf-switch-add-cond {
+  align-self: flex-start;
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 12px;
+  color: #4f6ef7;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.bf-switch-add-cond:hover {
+  color: #3553d6;
+}
+
+/* ELSE 说明行 */
 .bf-switch-else {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px;
-  margin-bottom: 10px;
+  padding: 6px 10px;
+  margin: 10px 0;
   border: 1px dashed #e2e5ee;
   border-radius: 8px;
   background: #fafbfd;
@@ -421,4 +613,13 @@
 .bf-switch-else-desc {
   font-size: 11px;
   color: #a2a9bd;
+}
+/* 「+ ELIF」：底部新增分支 */
+.bf-switch-add-branch {
+  color: #4f6ef7;
+  padding-left: 0;
+  font-size: 12px;
+}
+.bf-switch-add-branch:hover {
+  color: #3553d6 !important;
 }

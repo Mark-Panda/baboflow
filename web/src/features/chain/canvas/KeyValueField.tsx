@@ -52,15 +52,15 @@ export default function KeyValueField({
   return (
     <Space direction="vertical" style={{ width: '100%' }} size="small">
       {pairs.map((p, i) => (
-        <Space key={i} align="start" style={{ width: '100%' }}>
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%' }}>
           <Input
-            style={{ width: 140 }}
+            style={{ flex: '0 0 38%', minWidth: 0 }}
             value={p.k}
             placeholder={keyPlaceholder}
             onChange={(e) => update(i, { k: e.target.value })}
           />
           <Input
-            style={{ flex: 1 }}
+            style={{ flex: 1, minWidth: 0 }}
             value={p.v}
             placeholder={valuePlaceholder}
             onChange={(e) => update(i, { v: e.target.value })}
@@ -72,7 +72,7 @@ export default function KeyValueField({
             aria-label={`删除第${i + 1}行`}
             onClick={() => remove(i)}
           />
-        </Space>
+        </div>
       ))}
       <Button type="dashed" block icon={<PlusOutlined />} onClick={add}>
         {addText}

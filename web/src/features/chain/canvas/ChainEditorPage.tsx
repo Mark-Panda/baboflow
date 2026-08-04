@@ -3,7 +3,6 @@ import {
   App,
   Breadcrumb,
   Button,
-  Drawer,
   Form,
   Input,
   Space,
@@ -18,7 +17,6 @@ import {
   CaretRightOutlined,
   ApartmentOutlined,
   CheckCircleFilled,
-  SettingOutlined,
 } from "@ant-design/icons";
 import { useNavigate, useParams } from "react-router-dom";
 import { ReactFlowProvider, type Edge, type Node } from "@xyflow/react";
@@ -73,13 +71,14 @@ export default function ChainEditorPage() {
   const { id } = useParams<{ id: string }>();
   const isNew = id === "new";
   const navigate = useNavigate();
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
 
   const [chainId, setChainId] = useState<string>(isNew ? "" : id!);
   const [name, setName] = useState("未命名规则链");
   const [description, setDescription] = useState("");
   const [inputSchema, setInputSchema] = useState<Record<string, unknown> | undefined>(undefined);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  // 调试控制台是否显示在节点设置面板（点「调试」后打开）
+  const [debugOpen, setDebugOpen] = useState(false);
   const [status, setStatus] = useState<string>("draft");
   const [version, setVersion] = useState(0);
   const [dirty, setDirty] = useState(false);
@@ -121,6 +120,22 @@ export default function ChainEditorPage() {
     };
     stack.forEach((f) => walk(f.nodes));
     return map;
+  }, [stack]);
+  // 全部节点（含各层子画布，按画布顺序去重），供节点引用类字段（ref/groupAction 等）做下拉
+  const allNodes = useMemo(() => {
+    const list: { id: string; name: string; ruleType: string }[] = [];
+    const seen = new Set<string>();
+    const walk = (nodes: Node[]) => {
+      nodes.forEach((n) => {
+        if (seen.has(n.id)) return;
+        seen.add(n.id);
+        const d = n.data as RuleNodeData;
+        list.push({ id: n.id, name: d.name ?? d.ruleType, ruleType: d.ruleType });
+        if (d.subFlow?.nodes) walk(d.subFlow.nodes);
+      });
+    };
+    stack.forEach((f) => walk(f.nodes));
+    return list;
   }, [stack]);
   const setCur = useCallback((patch: Partial<Frame>) => {
     setStack((st) =>
@@ -295,50 +310,91 @@ export default function ChainEditorPage() {
     }
   }, [cur.nodes, cur.edges, setCur, message]);
 
-  // ---- 构建 DSL ----
-  const buildDsl = useCallback((): DslChain => {
-    const root = collapsedRoot();
-    return flowToDsl(
-      { id: chainId || undefined, name },
-      root.nodes,
-      root.edges,
-    );
-  }, [collapsedRoot, chainId, name]);
-
   // ---- 保存（返回最终生效的 chainId，新建时为创建后的 id）----
-  const onSave = useCallback(async (): Promise<string> => {
-    setSaving(true);
-    try {
-      if (!validateSwitchConfigurations(collapsedRoot().nodes)) {
-        message.warning("请补全条件分支的条件表达式和关系名称");
-        return "";
-      }
-      const dsl = buildDsl();
-      if (isNew && !chainId) {
-        const created = await chainApi.create({ name, description, inputSchema, dsl });
-        setChainId(created.id);
-        message.success("已创建规则链");
-        navigate(`/chains/${created.id}/edit`, { replace: true });
+  // 实际写库逻辑；发布/调试复用它直接保存，不弹键设置。
+  // 可传入要持久化的 description/inputSchema（弹窗确认时用编辑后的值，避免等 setState）。
+  const doSave = useCallback(
+    async (vals?: {
+      name: string;
+      description: string;
+      inputSchema?: Record<string, unknown>;
+    }): Promise<string> => {
+      const chainName = (vals?.name ?? name).trim() || name;
+      const desc = vals?.description ?? description;
+      const schema = vals ? vals.inputSchema : inputSchema;
+      setSaving(true);
+      try {
+        if (!validateSwitchConfigurations(collapsedRoot().nodes)) {
+          message.warning("请补全条件分支的条件表达式和关系名称");
+          return "";
+        }
+        const root = collapsedRoot();
+        const dsl = flowToDsl({ id: chainId || undefined, name: chainName }, root.nodes, root.edges);
+        if (isNew && !chainId) {
+          const created = await chainApi.create({ name: chainName, description: desc, inputSchema: schema, dsl });
+          setChainId(created.id);
+          message.success("已创建规则链");
+          navigate(`/chains/${created.id}/edit`, { replace: true });
+          setDirty(false);
+          return created.id;
+        }
+        await chainApi.update(chainId, { name: chainName, description: desc, inputSchema: schema, dsl });
+        message.success("已保存草稿");
         setDirty(false);
-        return created.id;
+        return chainId;
+      } catch {
+        /* 拦截器提示 */
+        return "";
+      } finally {
+        setSaving(false);
       }
-      await chainApi.update(chainId, { name, description, inputSchema, dsl });
-      message.success("已保存草稿");
-      setDirty(false);
-      return chainId;
-    } catch {
-      /* 拦截器提示 */
-      return "";
-    } finally {
-      setSaving(false);
-    }
-  }, [buildDsl, isNew, chainId, name, description, inputSchema, navigate, message]);
+    },
+    [collapsedRoot, isNew, chainId, name, description, inputSchema, navigate, message],
+  );
+
+  // ---- 点「保存草稿」：弹出键设置（名称 + 描述 + 入参），回显当前值，确认后保存 ----
+  const onSave = useCallback(() => {
+    // 用本地副本承载弹窗内编辑，确认后写回 state 并以编辑后的值直接保存。
+    let draftName = name;
+    let draftDesc = description;
+    let draftSchema = inputSchema;
+    modal.confirm({
+      title: "键设置 · 名称 / 描述 / 入参格式",
+      width: 720,
+      icon: null,
+      okText: "保存",
+      cancelText: "取消",
+      content: (
+        <ChainSettingsForm
+          name={name}
+          description={description}
+          inputSchema={inputSchema}
+          onChange={(patch) => {
+            if ("name" in patch) draftName = patch.name ?? "";
+            if ("description" in patch) draftDesc = patch.description ?? "";
+            if ("inputSchema" in patch) draftSchema = patch.inputSchema;
+          }}
+        />
+      ),
+      onOk: () => {
+        const finalName = draftName.trim() || name;
+        setName(finalName);
+        setDescription(draftDesc);
+        setInputSchema(draftSchema);
+        return doSave({
+          name: finalName,
+          description: draftDesc,
+          inputSchema: draftSchema,
+        }).then(() => undefined);
+      },
+    });
+  }, [name, description, inputSchema, modal, doSave]);
 
   // ---- 发布 ----
   const onPublish = useCallback(async () => {
     setPublishing(true);
     try {
-      const id = await onSave();
+      const id = await doSave();
       if (!id) {
         message.warning("保存失败，无法发布");
         return;
@@ -352,7 +408,7 @@ export default function ChainEditorPage() {
     } finally {
       setPublishing(false);
     }
-  }, [onSave, message]);
+  }, [doSave, message]);
 
   // ---- 调试 ----
   const onDebug = useCallback(
@@ -361,8 +417,8 @@ export default function ChainEditorPage() {
         message.warning("请先保存后再调试");
         return;
       }
-      // 先保存当前草稿，确保调试的是画布最新内容
-      const savedId = await onSave();
+      // 先保存当前草稿（直接保存，不弹键设置），确保调试的是画布最新内容
+      const savedId = await doSave();
       if (!savedId) return;
       setRunning(true);
       resetNodeStates();
@@ -389,8 +445,17 @@ export default function ChainEditorPage() {
         setRunning(false);
       }
     },
-    [chainId, onSave, resetNodeStates, setLastRun, setNodeState, message],
+    [chainId, doSave, resetNodeStates, setLastRun, setNodeState, message],
   );
+
+  // 点顶栏「调试」：在节点设置面板中打开调试控制台（再次点击可关闭），并立即用空输入跑一次
+  const onToggleDebug = useCallback(() => {
+    setDebugOpen((o) => {
+      const next = !o;
+      if (next) void onDebug("{}");
+      return next;
+    });
+  }, [onDebug]);
 
   const onClearDebug = useCallback(() => {
     resetNodeStates();
@@ -457,16 +522,20 @@ export default function ChainEditorPage() {
               onClick={() => navigate("/chains")}
             />
           </Tooltip>
-          <Input
-            value={name}
-            onChange={(e) => {
-              setName(e.target.value);
-              setDirty(true);
+          {/* 规则链名称：只读展示（不可在此编辑），改名通过「保存草稿」弹窗进行 */}
+          <span
+            style={{
+              maxWidth: 280,
+              fontWeight: 600,
+              fontSize: 14,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
             }}
-            bordered={false}
-            style={{ width: 240, fontWeight: 600, fontSize: 14 }}
-            placeholder="规则链名称"
-          />
+            title={name}
+          >
+            {name}
+          </span>
           <Tag
             color={status === "published" ? "green" : "default"}
             style={{ marginLeft: 4 }}
@@ -483,9 +552,6 @@ export default function ChainEditorPage() {
           )}
 
           <Space style={{ marginLeft: "auto" }} size="small">
-            <Tooltip title="链设置：描述与入参格式（供 MCP / SKILL 调用方参考）">
-              <Button icon={<SettingOutlined />} onClick={() => setSettingsOpen(true)} />
-            </Tooltip>
             <Tooltip title="自动整理布局">
               <Button icon={<ApartmentOutlined />} onClick={onLayout} />
             </Tooltip>
@@ -500,10 +566,10 @@ export default function ChainEditorPage() {
               发布
             </Button>
             <Button
-              type="primary"
+              type={debugOpen ? "default" : "primary"}
               icon={<CaretRightOutlined />}
               loading={running}
-              onClick={() => onDebug("{}")}
+              onClick={onToggleDebug}
             >
               调试
             </Button>
@@ -539,82 +605,83 @@ export default function ChainEditorPage() {
         {/* 三栏 */}
         <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
           <ComponentPalette />
-          <div
-            style={{
-              flex: 1,
-              minWidth: 0,
-              display: "flex",
-              flexDirection: "column",
-            }}
-          >
-            <div style={{ flex: 1, minHeight: 0 }}>
-              <FlowCanvas
-                nodes={cur.nodes}
-                edges={cur.edges}
-                components={components}
-                onNodesChange={(nodes) => setCur({ nodes })}
-                onEdgesChange={(edges) => setCur({ edges })}
-                onSelectNode={onSelectNode}
-                onEnterSub={enterSub}
-              />
-            </div>
-            <DebugPanel
-              running={running}
-              output={lastRun?.output ?? ""}
-              error={lastRun?.error ?? ""}
-              traces={lastRun?.traces ?? []}
-              nodeNames={nodeNames}
-              onRun={onDebug}
-              onClear={onClearDebug}
-              onLocateNode={onLocateNode}
+          <div style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
+            <FlowCanvas
+              nodes={cur.nodes}
+              edges={cur.edges}
+              components={components}
+              onNodesChange={(nodes) => setCur({ nodes })}
+              onEdgesChange={(edges) => setCur({ edges })}
+              onSelectNode={onSelectNode}
+              onEnterSub={enterSub}
             />
           </div>
-          <NodeConfigPanel
-            node={selectedNode}
-            components={components}
-            onChange={onNodeDataChange}
-            onDelete={onDeleteNode}
-          />
+          {/* 右侧：点「调试」→ 整栏为调试控制台（节点配置面板隐藏）；否则为节点设置面板 */}
+          <div className="bf-config" style={{ display: "flex", flexDirection: "column", padding: 0 }}>
+            {debugOpen ? (
+              <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+                <DebugPanel
+                  running={running}
+                  output={lastRun?.output ?? ""}
+                  error={lastRun?.error ?? ""}
+                  traces={lastRun?.traces ?? []}
+                  nodeNames={nodeNames}
+                  onRun={onDebug}
+                  onClear={onClearDebug}
+                  onLocateNode={onLocateNode}
+                />
+              </div>
+            ) : (
+              <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+                <NodeConfigPanel
+                  node={selectedNode}
+                  components={components}
+                  onChange={onNodeDataChange}
+                  onDelete={onDeleteNode}
+                  allNodes={allNodes}
+                />
+              </div>
+            )}
+          </div>
         </div>
       </div>
-
-      <Drawer
-        title="链设置 · 描述与入参格式"
-        width={720}
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-      >
-        <ChainSettingsForm
-          description={description}
-          inputSchema={inputSchema}
-          onChange={(patch) => {
-            if ("description" in patch) setDescription(patch.description ?? "");
-            if ("inputSchema" in patch) setInputSchema(patch.inputSchema);
-            setDirty(true);
-          }}
-        />
-      </Drawer>
     </ReactFlowProvider>
   );
 }
 
-// 链设置表单：编辑描述与入参 JSON Schema（供 MCP 暴露 / SKILL 生成向调用方说明如何传参）。
-// 本地受控（不走 antd Form），随主"保存草稿"一起持久化。
+// 键设置表单：编辑规则链名称 + 描述 + 入参 JSON Schema（供 MCP 暴露 / SKILL 生成向调用方说明如何传参）。
+// 在 modal.confirm 中挂载（content 一次性渲染、父组件不重渲染），因此名称/描述用本地 state 自管受控，
+// onChange 只负责把最新值同步给父级的确认回调。
 function ChainSettingsForm({
+  name,
   description,
   inputSchema,
   onChange,
 }: {
+  name: string;
   description: string;
   inputSchema?: Record<string, unknown>;
   onChange: (patch: {
+    name?: string;
     description?: string;
     inputSchema?: Record<string, unknown>;
   }) => void;
 }) {
+  const [localName, setLocalName] = useState(name);
+  const [localDesc, setLocalDesc] = useState(description);
   return (
     <div>
       <Form layout="vertical" size="small">
+        <Form.Item label="规则链名称" style={{ marginBottom: 16 }} required>
+          <Input
+            value={localName}
+            placeholder="规则链名称"
+            onChange={(e) => {
+              setLocalName(e.target.value);
+              onChange({ name: e.target.value });
+            }}
+          />
+        </Form.Item>
         <Form.Item
           label="规则链描述"
           style={{ marginBottom: 16 }}
@@ -622,9 +689,12 @@ function ChainSettingsForm({
         >
           <Input.TextArea
             rows={3}
-            value={description}
+            value={localDesc}
             placeholder="这条规则链做什么？"
-            onChange={(e) => onChange({ description: e.target.value })}
+            onChange={(e) => {
+              setLocalDesc(e.target.value);
+              onChange({ description: e.target.value });
+            }}
           />
         </Form.Item>
         <Form.Item

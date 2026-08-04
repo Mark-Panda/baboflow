@@ -9,12 +9,16 @@ import { mcpApi } from '@/api/mcp';
 import { skillApi } from '@/api/skill';
 import { archeryApi } from '@/api/archery';
 import type { RelationRef } from './fieldWidgets';
+import NodeSelect, { type NodeOption } from './NodeSelect';
 
 export interface RelationSelectProps {
   relation: RelationRef;
   value?: unknown;
   onChange?: (v: unknown) => void;
   placeholder?: string;
+  // nodes 资源：当前规则链可引用节点 + 排除自身
+  nodes?: NodeOption[];
+  excludeId?: string;
 }
 
 interface Option {
@@ -23,13 +27,29 @@ interface Option {
 }
 
 // 关系下拉：按 relation.api 调对应 list 接口，showSearch 过滤。
-// 统一渲染为受控 Select；LLM 模型走两级级联（先 provider 后 model）。
+// 统一渲染为受控 Select；LLM 模型走两级级联（先 provider 后 model）；
+// nodes 走前端本地节点选择器（本链下拉，可手输跨链）。
 export default function RelationSelect({
   relation,
   value,
   onChange,
   placeholder,
+  nodes,
+  excludeId,
 }: RelationSelectProps) {
+  if (relation.api === 'nodes') {
+    return (
+      <NodeSelect
+        nodes={nodes ?? []}
+        excludeId={excludeId}
+        multiple={relation.multiple}
+        freeInput={relation.freeInput}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+      />
+    );
+  }
   if (relation.api === 'llmModels') {
     return (
       <LlmModelCascade

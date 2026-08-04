@@ -1,8 +1,8 @@
 // Switch 分支可视化构建器：参考 IF/ELIF/ELSE 设计，规则行（左值/运算符/右值）⇄ expr-lang 表达式。
 // 受控组件：value 为 [{case, then}]，onChange 回传同构数组（写回 RuleGo switch 的 configuration.cases）。
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Input, Segmented, Select, Tooltip } from 'antd';
-import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
+import { Button, Input, Select, Space, Tooltip } from 'antd';
+import { CloseOutlined, MenuOutlined, PlusOutlined } from '@ant-design/icons';
 
 import {
   RULE_OPS,
@@ -56,6 +56,38 @@ function toStates(items: SwitchCaseItem[]): Record<number, BranchState> {
 // value 的结构化指纹：用于区分「本组件 onChange 回环」与「外部重置」。
 function fingerprint(items: SwitchCaseItem[] | undefined): string {
   return JSON.stringify(items ?? []);
+}
+
+// 按 OR 把扁平规则行切成可视分组（截图布局：一组 = 左侧竖向导引条 + 组内若干行，
+// 组间为 OR，组内为 AND）。仅影响渲染；底层仍是带 per-rule join 的扁平数组。
+interface OrGroup {
+  rules: CondRule[]; // 组内规则（join 相对组内前一条；首条忽略）
+  join: Combinator; // 组内连接符（仅 AND 组可编辑）
+  isOrGroup: boolean; // true= OR 组（单一条件，「添加 OR 条件」再挂一条）
+}
+
+function groupByOr(rules: CondRule[]): OrGroup[] {
+  const out: OrGroup[] = [];
+  let cur: CondRule[] = [];
+  let curJoin: Combinator = '&&';
+  rules.forEach((r, i) => {
+    if (i === 0) {
+      cur = [r];
+      curJoin = '&&';
+      return;
+    }
+    const j = r.join ?? '&&';
+    if (j === '&&') {
+      cur.push(r); // 并入当前 AND 组
+      return;
+    }
+    // 遇到 ||：结束当前组，开启一个新的 OR 组（每组仅一条）
+    out.push({ rules: cur, join: curJoin, isOrGroup: false });
+    cur = [r];
+    curJoin = '||';
+  });
+  if (cur.length > 0) out.push({ rules: cur, join: curJoin, isOrGroup: out.length > 0 });
+  return out;
 }
 
 export default function SwitchCasesBuilder({ value, onChange }: SwitchCasesBuilderProps) {
@@ -133,19 +165,119 @@ export default function SwitchCasesBuilder({ value, onChange }: SwitchCasesBuild
     }
   };
 
+  // 高级模式 ⇄ 构建模式：头部小图标循环切换（截图头部仅 IF + 添加OR + 关闭）。
+  const cycleMode = (i: number) => {
+    const st = stateOf(i);
+    toggleMode(i, st.mode === 'simple' ? 'advanced' : 'simple');
+  };
+
   const updateRule = (i: number, key: string, patch: Partial<CondRule>) => {
     const st = stateOf(i);
     const rules = st.rules.map((r) => (r.key === key ? { ...r, ...patch } : r));
     setBranch(i, { ...st, rules });
   };
-  const addRule = (i: number) => {
+  // 组内「添加条件」→ join '&&'（并入当前 AND 组）；
+  // 头部「添加 OR 条件」→ join '||'（另起 OR 组）。两者只是新行的 join 不同。
+  const addRule = (i: number, join: Combinator = '&&') => {
     const st = stateOf(i);
-    setBranch(i, { ...st, rules: [...st.rules, { ...emptyRule(), join: '&&' }] });
+    setBranch(i, { ...st, rules: [...st.rules, { ...emptyRule(), join }] });
   };
   const removeRule = (i: number, key: string) => {
     const st = stateOf(i);
     const rules = st.rules.filter((r) => r.key !== key);
     setBranch(i, { ...st, rules: rules.length > 0 ? rules : [emptyRule()] });
+  };
+
+  // 渲染一条规则行的「运算符」下拉（内嵌在左值输入框后，类名 .bf-switch-op 供测试定位）。
+  const renderOp = (i: number, r: CondRule, width: number) => (
+    <Select
+      size="small"
+      variant="borderless"
+      className="bf-switch-op"
+      style={{ width, flex: 'none' }}
+      popupMatchSelectWidth={false}
+      value={r.op}
+      onChange={(op) => updateRule(i, r.key, { op })}
+      options={RULE_OPS.map((o) => ({ value: o.value, label: o.label }))}
+    />
+  );
+
+  // 一组（AND 组 或 OR 组）的渲染：左侧竖向导引条 + 组内规则行。
+  const renderGroup = (i: number, group: OrGroup) => {
+    const canEditJoin = group.rules.length > 1; // 组内 >1 条才可切换 AND/OR
+    return (
+      <div className="bf-switch-cond">
+        {/* 左侧竖向导引条：标记本组组内连接符（AND/OR） */}
+        <div className="bf-switch-rail">
+          {canEditJoin ? (
+            <Select
+              size="small"
+              variant="borderless"
+              className="bf-switch-join"
+              popupMatchSelectWidth={false}
+              value={group.join}
+              onChange={(c) => {
+                const j = c as Combinator;
+                group.rules.forEach((r, gi) => {
+                  if (gi > 0) updateRule(i, r.key, { join: j });
+                });
+              }}
+              options={[
+                { value: '&&', label: 'AND' },
+                { value: '||', label: 'OR' },
+              ]}
+            />
+          ) : (
+            <span className="bf-switch-join bf-switch-join-static">
+              {group.isOrGroup ? 'OR' : 'AND'}
+            </span>
+          )}
+        </div>
+
+        {/* 组内规则行：单行 = [左值(内嵌运算符) | 右值 | 删除] */}
+        <div className="bf-switch-rules">
+          {group.rules.map((r) => {
+            const needsValue = RULE_OPS.find((o) => o.value === r.op)?.needsValue ?? true;
+            return (
+              <div key={r.key} className="bf-switch-rule">
+                <div className="bf-switch-rule-io">
+                  {/* 左值 + 运算符（Space.Compact 使两者融为一体，运算符贴右缘） */}
+                  <Space.Compact className="bf-switch-left">
+                    <Input
+                      size="small"
+                      value={r.left}
+                      placeholder="左值，如 msg.temperature"
+                      onChange={(e) => updateRule(i, r.key, { left: e.target.value })}
+                    />
+                    {renderOp(i, r, needsValue ? 92 : 130)}
+                  </Space.Compact>
+                  {needsValue ? (
+                    <Input
+                      size="small"
+                      className="bf-switch-right"
+                      value={r.right}
+                      placeholder="右值"
+                      onChange={(e) => updateRule(i, r.key, { right: e.target.value })}
+                    />
+                  ) : null}
+                  <Button
+                    danger
+                    type="text"
+                    size="small"
+                    icon={<CloseOutlined />}
+                    aria-label="删除条件"
+                    onClick={() => removeRule(i, r.key)}
+                  />
+                </div>
+              </div>
+            );
+          })}
+          <button type="button" className="bf-switch-add-cond" onClick={() => addRule(i)}>
+            <PlusOutlined /> 添加条件
+          </button>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -155,6 +287,7 @@ export default function SwitchCasesBuilder({ value, onChange }: SwitchCasesBuild
         const branchLabel = i === 0 ? 'IF' : `ELIF ${i}`;
         return (
           <div key={i} className="bf-switch-branch">
+            {/* 分支头：IF 标签 + 分支名 + 添加 OR 条件 + 模式切换 + 关闭 */}
             <div className="bf-switch-branch-head">
               <span className="bf-switch-tag">{branchLabel}</span>
               <Input
@@ -164,82 +297,41 @@ export default function SwitchCasesBuilder({ value, onChange }: SwitchCasesBuild
                 placeholder="分支名（路由连接类型）"
                 onChange={(e) => setThen(i, e.target.value)}
               />
-              <Segmented
-                size="small"
-                value={st.mode}
-                onChange={(m) => toggleMode(i, m as 'simple' | 'advanced')}
-                options={[
-                  { value: 'simple', label: '构建' },
-                  { value: 'advanced', label: '表达式' },
-                ]}
-              />
+              {st.mode === 'simple' ? (
+                <button
+                  type="button"
+                  className="bf-switch-add-or"
+                  onClick={() => addRule(i, '||')}
+                >
+                  添加 OR 条件
+                </button>
+              ) : null}
+              <Tooltip title={st.mode === 'simple' ? '切换为表达式编辑' : '切换为可视化构建'}>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<MenuOutlined />}
+                  aria-label="切换编辑模式"
+                  onClick={() => cycleMode(i)}
+                />
+              </Tooltip>
               <Tooltip title="删除该分支">
-                <Button danger type="text" size="small" icon={<DeleteOutlined />} onClick={() => removeBranch(i)} />
+                <Button
+                  danger
+                  type="text"
+                  size="small"
+                  icon={<CloseOutlined />}
+                  aria-label="删除分支"
+                  onClick={() => removeBranch(i)}
+                />
               </Tooltip>
             </div>
 
             {st.mode === 'simple' ? (
-              <div className="bf-switch-rules">
-                {st.rules.map((r, ri) => {
-                  const needsValue = RULE_OPS.find((o) => o.value === r.op)?.needsValue ?? true;
-                  return (
-                    /* 两行：行1=连接符+运算符(全宽,始终可见)+删除；行2=左值+右值 */
-                    <div key={r.key} className="bf-switch-rule">
-                      <div className="bf-switch-rule-top">
-                        {ri === 0 ? (
-                          <span className="bf-switch-join bf-switch-join-first">当</span>
-                        ) : (
-                          <Select
-                            size="small"
-                            className="bf-switch-join"
-                            value={r.join ?? '&&'}
-                            onChange={(c) => updateRule(i, r.key, { join: c as Combinator })}
-                            options={[
-                              { value: '&&', label: '且' },
-                              { value: '||', label: '或' },
-                            ]}
-                          />
-                        )}
-                        <Select
-                          size="small"
-                          className="bf-switch-op"
-                          value={r.op}
-                          onChange={(op) => updateRule(i, r.key, { op })}
-                          options={RULE_OPS.map((o) => ({ value: o.value, label: o.label }))}
-                        />
-                        <Button
-                          danger
-                          type="text"
-                          size="small"
-                          icon={<DeleteOutlined />}
-                          aria-label="删除条件"
-                          onClick={() => removeRule(i, r.key)}
-                        />
-                      </div>
-                      <div className="bf-switch-rule-io">
-                        <Input
-                          size="small"
-                          className="bf-switch-left"
-                          value={r.left}
-                          placeholder="左值，如 msg.temperature"
-                          onChange={(e) => updateRule(i, r.key, { left: e.target.value })}
-                        />
-                        {needsValue ? (
-                          <Input
-                            size="small"
-                            className="bf-switch-right"
-                            value={r.right}
-                            placeholder="右值"
-                            onChange={(e) => updateRule(i, r.key, { right: e.target.value })}
-                          />
-                        ) : null}
-                      </div>
-                    </div>
-                  );
-                })}
-                <Button type="dashed" size="small" icon={<PlusOutlined />} onClick={() => addRule(i)}>
-                  添加条件
-                </Button>
+              <div className="bf-switch-groups">
+                {groupByOr(st.rules).map((g, gi) => (
+                  <div key={g.rules[0]?.key ?? gi}>{renderGroup(i, g)}</div>
+                ))}
               </div>
             ) : (
               <Input.TextArea
@@ -256,11 +348,11 @@ export default function SwitchCasesBuilder({ value, onChange }: SwitchCasesBuild
 
       <div className="bf-switch-else">
         <span className="bf-switch-tag bf-switch-tag-else">ELSE</span>
-        <span className="bf-switch-else-desc">以上条件都不满足时走 Default 分支</span>
+        <span className="bf-switch-else-desc">ELSE 用于定义当 if 条件不满足时执行的逻辑。</span>
       </div>
 
-      <Button type="dashed" block icon={<PlusOutlined />} onClick={addBranch}>
-        添加 ELIF 分支
+      <Button type="text" className="bf-switch-add-branch" icon={<PlusOutlined />} onClick={addBranch}>
+        ELIF
       </Button>
     </div>
   );

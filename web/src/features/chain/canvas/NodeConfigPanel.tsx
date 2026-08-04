@@ -1,5 +1,6 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  AutoComplete,
   Button,
   Divider,
   Empty,
@@ -9,17 +10,30 @@ import {
   Radio,
   Select,
   Switch,
+  Tooltip,
+  Typography,
 } from "antd";
-import { DeleteOutlined } from "@ant-design/icons";
+import { DeleteOutlined, DownOutlined, RightOutlined } from "@ant-design/icons";
 import type { Node } from "@xyflow/react";
 
 import { ComponentFormField, ComponentMeta } from "@/api/component";
 import { RuleNodeData } from "./chainDsl";
-import { componentZhName, fieldZh, optionZh } from "./componentZh";
-import { relationFor, useRadio, widgetFor } from "./fieldWidgets";
+import { componentZhDesc, componentZhName, fieldZh, optionZh } from "./componentZh";
+import {
+  fieldGroupsFor,
+  isFreeInputSelect,
+  isHiddenField,
+  isStructArrayField,
+  relationFor,
+  staticOptionsFor,
+  useRadio,
+  widgetFor,
+} from "./fieldWidgets";
 import RelationSelect from "./RelationSelect";
+import type { NodeOption } from "./NodeSelect";
 import JsonField from "./JsonField";
 import KeyValueField from "./KeyValueField";
+import StructArrayField from "./StructArrayField";
 import SwitchCasesBuilder from "./SwitchCasesBuilder";
 import CodeField from "@/components/CodeField";
 
@@ -28,6 +42,8 @@ export interface NodeConfigPanelProps {
   components: ComponentMeta[];
   onChange: (nodeId: string, patch: Partial<RuleNodeData>) => void;
   onDelete: (nodeId: string) => void;
+  // 当前规则链全部节点（跨子画布打平），供节点引用类字段做下拉
+  allNodes?: NodeOption[];
 }
 
 export default function NodeConfigPanel({
@@ -35,6 +51,7 @@ export default function NodeConfigPanel({
   components,
   onChange,
   onDelete,
+  allNodes = [],
 }: NodeConfigPanelProps) {
   const [form] = Form.useForm();
   const d = node?.data as RuleNodeData | undefined;
@@ -43,6 +60,30 @@ export default function NodeConfigPanel({
     () => components.find((c) => c.type === d?.ruleType)?.configSchema,
     [components, d?.ruleType],
   );
+
+  // 可见配置字段：过滤掉前端隐藏的（如 delay 的 deprecated 字段）。
+  const visibleFields = useMemo(
+    () =>
+      (schema?.fields ?? []).filter(
+        (f) => !isHiddenField(d?.ruleType ?? "", f.name),
+      ),
+    [schema, d?.ruleType],
+  );
+
+  // 长表单分组（restApiCall/sendEmail/mqttClient 等）；未配置则平铺。
+  const groups = useMemo(
+    () => fieldGroupsFor(d?.ruleType ?? ""),
+    [d?.ruleType],
+  );
+  // 折叠状态：key 为分组 title；默认收起 defaultCollapsed 的组。
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    const init: Record<string, boolean> = {};
+    (groups ?? []).forEach((g) => {
+      init[g.title] = !!g.defaultCollapsed;
+    });
+    setCollapsed(init);
+  }, [groups, node?.id]);
 
   useEffect(() => {
     form.resetFields();
@@ -57,7 +98,7 @@ export default function NodeConfigPanel({
 
   if (!node || !d) {
     return (
-      <div className="bf-config">
+      <div className="bf-config-panel">
         <div className="bf-config-empty">
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -85,57 +126,160 @@ export default function NodeConfigPanel({
     onChange(node.id, patch);
   };
 
+  // 渲染单个配置字段（switch.cases 走专用构建器）。
+  const renderField = (f: ComponentFormField) =>
+    d.ruleType === "switch" && f.name === "cases" ? (
+      <SwitchCasesField key={f.name} field={f} />
+    ) : (
+      <SchemaField
+        key={f.name}
+        field={f}
+        ruleType={d.ruleType}
+        allNodes={allNodes}
+        selfId={node.id}
+      />
+    );
+
+  // 分组渲染：按 FIELD_GROUPS 顺序，未列入任何组的字段追加到「其它」组（保持兜底，不丢字段）。
+  const renderGrouped = () => {
+    const byName = new Map(visibleFields.map((f) => [f.name, f]));
+    const assigned = new Set<string>();
+    const sections: React.ReactNode[] = [];
+    (groups ?? []).forEach((g) => {
+      const gfs = g.fields
+        .map((n) => byName.get(n))
+        .filter((x): x is ComponentFormField => !!x);
+      gfs.forEach((f) => assigned.add(f.name));
+      if (gfs.length === 0) return;
+      const isCollapsed = !!collapsed[g.title];
+      sections.push(
+        <div key={g.title} className="bf-cfg-group">
+          <button
+            type="button"
+            className="bf-cfg-group-head"
+            onClick={() =>
+              setCollapsed((c) => ({ ...c, [g.title]: !c[g.title] }))
+            }
+          >
+            {isCollapsed ? <RightOutlined /> : <DownOutlined />}
+            <span>{g.title}</span>
+            <span className="bf-cfg-group-count">{gfs.length}</span>
+          </button>
+          {!isCollapsed && <div className="bf-cfg-group-body">{gfs.map(renderField)}</div>}
+        </div>,
+      );
+    });
+    // 兜底：未进任何分组的字段（schema 新增字段时不会丢）。
+    const rest = visibleFields.filter((f) => !assigned.has(f.name));
+    if (rest.length > 0) {
+      sections.push(
+        <div key="__rest" className="bf-cfg-group">
+          <div className="bf-cfg-group-head bf-cfg-group-head-static">
+            <span>其它</span>
+            <span className="bf-cfg-group-count">{rest.length}</span>
+          </div>
+          <div className="bf-cfg-group-body">{rest.map(renderField)}</div>
+        </div>,
+      );
+    }
+    return sections;
+  };
+
   return (
-    <div className="bf-config">
-      <div style={{ padding: 14 }}>
+    <div className="bf-config-panel">
+      <div className="bf-config-body">
+        {/* 节点标题卡：中文名 + 英文 type + 组件简述（只读，替代原占整行的禁用输入框） */}
+        <div className="bf-config-head">
+          <div className="bf-config-head-title">
+            <span className="bf-config-head-name">{componentZhName(d.ruleType)}</span>
+            <span className="bf-config-head-type">{d.ruleType}</span>
+          </div>
+          {componentZhDesc(d.ruleType) && (
+            <div className="bf-config-head-desc">{componentZhDesc(d.ruleType)}</div>
+          )}
+        </div>
+
         <Form
           form={form}
           layout="vertical"
           size="middle"
           onValuesChange={handleValues}
         >
-          <Form.Item name="__name" label="节点名称">
+          <Form.Item
+            name="__name"
+            label={
+              <span className="bf-node-name-label">
+                节点名称
+                <Tooltip title="节点 ID（只读，点击复制）">
+                  <Typography.Text
+                    className="bf-node-id-chip"
+                    copyable={{ text: node.id, tooltips: ["复制 ID", "已复制"] }}
+                  >
+                    {node.id}
+                  </Typography.Text>
+                </Tooltip>
+              </span>
+            }
+            style={{ marginBottom: 10 }}
+          >
             <Input placeholder={componentZhName(d.ruleType)} />
-          </Form.Item>
-          <Form.Item label="组件类型">
-            <Input
-              value={`${componentZhName(d.ruleType)}（${d.ruleType}）`}
-              disabled
-            />
           </Form.Item>
           <Form.Item
             name="__debug"
             label="调试模式"
             valuePropName="checked"
             tooltip="运行时输出该节点逐条事件"
+            style={{ marginBottom: 10 }}
           >
             <Switch size="small" />
           </Form.Item>
 
-          {(schema?.fields?.length ?? 0) > 0 && (
-            <Divider style={{ margin: "8px 0" }} plain>
+          {visibleFields.length > 0 && (
+            <Divider style={{ margin: "4px 0 12px" }} plain>
               配置
             </Divider>
           )}
 
-          {(schema?.fields ?? []).map((f) => (
-            d.ruleType === "switch" && f.name === "cases" ? (
-              <SwitchCasesField key={f.name} field={f} />
-            ) : (
-              <SchemaField key={f.name} field={f} ruleType={d.ruleType} />
-            )
-          ))}
+          {groups ? renderGrouped() : visibleFields.map(renderField)}
+
+          {/* comment 节点在 RuleGo 无配置字段，这里补一个本地注释框（写入 configuration.comment） */}
+          {d.ruleType === "comment" && (
+            <Form.Item
+              name="comment"
+              label={
+                <span>
+                  注释内容
+                  <div
+                    style={{
+                      color: "#a2a9bd",
+                      fontSize: 11,
+                      fontWeight: 400,
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    仅作画布说明，不参与执行
+                  </div>
+                </span>
+              }
+            >
+              <Input.TextArea
+                rows={4}
+                placeholder="给这个节点写点说明…"
+              />
+            </Form.Item>
+          )}
         </Form>
 
-        <Divider style={{ margin: "12px 0" }} />
-        <Button
-          danger
-          block
-          icon={<DeleteOutlined />}
-          onClick={() => onDelete(node.id)}
-        >
-          删除节点
-        </Button>
+        <div className="bf-config-foot">
+          <Button
+            danger
+            size="small"
+            icon={<DeleteOutlined />}
+            onClick={() => onDelete(node.id)}
+          >
+            删除节点
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -213,15 +357,19 @@ function useFieldLabel(ruleType: string, f: ComponentFormField) {
 function SchemaField({
   field: f,
   ruleType,
+  allNodes = [],
+  selfId,
 }: {
   field: ComponentFormField;
   ruleType: string;
+  allNodes?: NodeOption[];
+  selfId?: string;
 }) {
   const { label, labelText } = useFieldLabel(ruleType, f);
   const required = f.required || (f.rules ?? []).some((r) => r.required);
   const reqMsg = `请填写${labelText}`;
 
-  // 1. 关系下拉（引用其它平台资源：子链 / Agent / LLM / MCP / Skill）
+  // 1. 关系下拉（引用其它平台资源：子链 / Agent / LLM / MCP / Skill / 本链节点）
   const relation = relationFor(ruleType, f.name);
   if (relation) {
     return (
@@ -230,12 +378,17 @@ function SchemaField({
         label={label}
         rules={[{ required, message: `请选择${labelText}` }]}
       >
-        <RelationSelect relation={relation} placeholder={`请选择${labelText}`} />
+        <RelationSelect
+          relation={relation}
+          placeholder={`请选择${labelText}`}
+          nodes={allNodes}
+          excludeId={selfId}
+        />
       </Form.Item>
     );
   }
 
-  // 2. 单选按钮（少量静态枚举选项）
+  // 2. 单选按钮（schema 声明的少量静态枚举选项）
   const radioOptions =
     (f.component?.options as
       | Array<{ label: string; value: unknown }>
@@ -255,6 +408,57 @@ function SchemaField({
             value: o.value,
           }))}
         />
+      </Form.Item>
+    );
+  }
+
+  // 2b. 前端补的静态枚举（schema 未给 options，但取值集合明确）：下拉/单选。
+  // 少数允许自定义的（如 groupAction.matchRelationType）用 AutoComplete 可输可选。
+  const staticOpts = staticOptionsFor(ruleType, f.name);
+  if (staticOpts && staticOpts.length > 0) {
+    const rules = [{ required, message: `请选择${labelText}` }];
+    if (isFreeInputSelect(ruleType, f.name)) {
+      return (
+        <Form.Item name={f.name} label={label} rules={rules}>
+          <AutoComplete
+            allowClear
+            options={staticOpts}
+            placeholder={`请选择或输入${labelText}`}
+          />
+        </Form.Item>
+      );
+    }
+    if (useRadio(ruleType, f.name, staticOpts.length)) {
+      return (
+        <Form.Item name={f.name} label={label} rules={rules}>
+          <Radio.Group
+            optionType="button"
+            buttonStyle="solid"
+            options={staticOpts}
+          />
+        </Form.Item>
+      );
+    }
+    return (
+      <Form.Item name={f.name} label={label} rules={rules}>
+        <Select
+          options={staticOpts}
+          allowClear
+          placeholder={`请选择${labelText}`}
+        />
+      </Form.Item>
+    );
+  }
+
+  // 2c. struct 数组（cache.keys/items）：按子字段 schema 渲染可增删的行编辑器。
+  if (isStructArrayField(ruleType, f.name) && (f.fields?.length ?? 0) > 0) {
+    return (
+      <Form.Item
+        name={f.name}
+        label={label}
+        rules={[{ required, message: reqMsg }]}
+      >
+        <StructArrayField subFields={f.fields ?? []} ruleType={ruleType} />
       </Form.Item>
     );
   }
