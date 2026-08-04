@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { basicSetup } from "codemirror";
 import { EditorState } from "@codemirror/state";
 import { indentWithTab } from "@codemirror/commands";
@@ -67,7 +67,7 @@ export default function CodeField({
   rows = 6,
   placeholder: placeholderText,
 }: CodeFieldProps) {
-  const editorRef = useRef<HTMLDivElement>(null);
+  const hostRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | undefined>(undefined);
   const editorValueRef = useRef(value);
   const onChangeRef = useRef(onChange);
@@ -80,57 +80,83 @@ export default function CodeField({
 
   onChangeRef.current = onChange;
 
-  useEffect(() => {
-    if (!editorRef.current) return undefined;
-    const view = new EditorView({
-      state: EditorState.create({
-        doc: editorValueRef.current,
-        extensions: [
-          basicSetup,
-          keymap.of([indentWithTab]),
-          oneDark,
-          languageExtension(lang),
-          placeholder(placeholderText ?? `请输入${lang}内容`),
-          EditorView.contentAttributes.of({
-            "aria-label": placeholderText ?? `${lang.toUpperCase()} 配置编辑器`,
-          }),
-          EditorView.theme({
-            "&": {
-              minHeight: expanded
-                ? "calc(72vh - 58px)"
-                : `${rows * 1.55 + 1}em`,
-            },
-            ".cm-scroller": {
-              overflow: "auto",
-              fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-            },
-            ".cm-content": {
-              padding: "8px 10px",
-              minHeight: expanded ? "calc(72vh - 70px)" : `${rows * 1.55}em`,
-            },
-            ".cm-gutters": { borderRight: "1px solid #1c2338" },
-          }),
-          EditorView.updateListener.of((update) => {
-            if (update.docChanged) {
-              const next = update.state.doc.toString();
-              editorValueRef.current = next;
-              onChangeRef.current?.(next);
-            }
-          }),
-        ],
-      }),
-      parent: editorRef.current,
-    });
-    viewRef.current = view;
-    return () => {
-      editorValueRef.current = view.state.doc.toString();
-      formatSeq.current += 1;
-      setFormatting(false);
-      view.destroy();
-      viewRef.current = undefined;
-    };
-  }, [expanded, lang, rows, placeholderText]);
+  // 用「回调 ref」挂载/销毁 CodeMirror，而不是 useEffect：
+  // 展开/收起会把编辑器宿主节点在「面板内 ↔ Modal 内」两处 JSX 间移动，antd 的 Modal 又比
+  // expanded 状态晚一个提交才真正渲染子节点。effect 依赖 expanded 会在 host 尚未出现时提前跑
+  // （editorRef.current=null）从而漏挂。回调 ref 由 React 在宿主节点真正插入/移除 DOM 的那一刻
+  // 同步调用，天然对齐 antd 的真实挂载时机——不丢内容、放大后立即可编辑。
+  const attachEditor = useCallback(
+    (node: HTMLDivElement | null) => {
+      // 同一节点重复回调（React 18 StrictMode 或重渲染）则忽略，避免重复建/销毁。
+      if (node === hostRef.current) return;
 
+      // 旧宿主被移除：销毁旧编辑器，把内容暂存进 editorValueRef 以便在新宿主里恢复。
+      if (viewRef.current) {
+        editorValueRef.current = viewRef.current.state.doc.toString();
+        formatSeq.current += 1;
+        setFormatting(false);
+        viewRef.current.destroy();
+        viewRef.current = undefined;
+      }
+      hostRef.current = node;
+      if (!node) return;
+
+      const view = new EditorView({
+        state: EditorState.create({
+          doc: editorValueRef.current,
+          extensions: [
+            basicSetup,
+            keymap.of([indentWithTab]),
+            oneDark,
+            languageExtension(lang),
+            placeholder(placeholderText ?? `请输入${lang}内容`),
+            EditorView.contentAttributes.of({
+              "aria-label": placeholderText ?? `${lang.toUpperCase()} 配置编辑器`,
+            }),
+            EditorView.theme({
+              "&": {
+                minHeight: expanded ? "calc(72vh - 58px)" : `${rows * 1.55 + 1}em`,
+              },
+              ".cm-scroller": {
+                overflow: "auto",
+                fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+              },
+              ".cm-content": {
+                padding: "8px 10px",
+                minHeight: expanded ? "calc(72vh - 70px)" : `${rows * 1.55}em`,
+              },
+              ".cm-gutters": { borderRight: "1px solid #1c2338" },
+            }),
+            EditorView.updateListener.of((update) => {
+              if (update.docChanged) {
+                const next = update.state.doc.toString();
+                editorValueRef.current = next;
+                onChangeRef.current?.(next);
+              }
+            }),
+          ],
+        }),
+        parent: node,
+      });
+      viewRef.current = view;
+    },
+    [expanded, lang, rows, placeholderText],
+  );
+
+  // 组件卸载时兜底销毁编辑器（回调 ref 收到 null 已处理常规路径，这里覆盖异常卸载）。
+  useEffect(() => {
+    return () => {
+      if (viewRef.current) {
+        editorValueRef.current = viewRef.current.state.doc.toString();
+        formatSeq.current += 1;
+        viewRef.current.destroy();
+        viewRef.current = undefined;
+      }
+      hostRef.current = null;
+    };
+  }, []);
+
+  // 外部 value 变化（受控）：同步进编辑器（编辑器未挂载时仅更新 ref，待挂载时用最新值）。
   useEffect(() => {
     editorValueRef.current = value;
     const view = viewRef.current;
@@ -203,7 +229,7 @@ export default function CodeField({
       </div>
     </div>
   );
-  const editorHost = <div className="bf-codefield-editor" ref={editorRef} />;
+  const editorHost = <div className="bf-codefield-editor" ref={attachEditor} />;
 
   return (
     <>
