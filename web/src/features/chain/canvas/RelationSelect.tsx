@@ -162,7 +162,7 @@ function LlmModelCascade({
   onChange,
   placeholder,
 }: RelationSelectProps) {
-  const [providerId, setProviderId] = useState<number | undefined>(undefined);
+  const [providerId, setProviderId] = useState<string | undefined>(undefined);
 
   const providers = useQuery({
     queryKey: ['relation-options', 'llmProviders'],
@@ -216,7 +216,7 @@ function LlmModelCascade({
         placeholder={placeholder ?? '选择模型'}
         loading={models.isLoading}
         options={models.data ?? []}
-        value={value as number | undefined}
+        value={value as string | undefined}
         onChange={(v) => onChange?.(v)}
         disabled={providerId == null}
       />

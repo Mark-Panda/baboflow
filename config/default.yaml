@@ -13,8 +13,8 @@
 
 # HTTP/WS 监听地址
 httpAddr: ":8000"
-# gRPC 监听地址
-grpcAddr: ":9000"
+# gRPC 监听地址：默认仅本机可访问；如需经受控反向代理或专用网络暴露，用 GRPC_ADDR 显式覆盖。
+grpcAddr: "127.0.0.1:9000"
 
 # PostgreSQL DSN
 databaseDsn: "host=127.0.0.1 user=babo password=babo dbname=baboflow port=5432 sslmode=disable"

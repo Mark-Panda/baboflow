@@ -1,7 +1,7 @@
-import http from './http';
+import http, { ProtoInt64 } from './http';
 
 export interface CurrentUser {
-  id: number;
+  userId: ProtoInt64;
   username: string;
   displayName: string;
   mustChangePwd: boolean;

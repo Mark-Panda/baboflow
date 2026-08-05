@@ -1,0 +1,27 @@
+syntax = "proto3";
+package baboflow.v1;
+import "google/api/annotations.proto";
+import "google/protobuf/struct.proto";
+import "baboflow/v1/common.proto";
+option go_package = "baboflow/api/baboflow/v1;v1";
+message McpServer { int64 id = 1; string name = 2; string transport = 3; string endpoint = 4; string command = 5; repeated string args = 6; map<string,string> env = 7; string status = 8; string lastCheckAt = 9; string createdAt = 10; string updatedAt = 11; } message McpServerInput { string name = 1; string transport = 2; string endpoint = 3; string command = 4; repeated string args = 5; map<string,string> env = 6; } message McpServerRequest { int64 id = 1; string name = 2; string transport = 3; string endpoint = 4; string command = 5; repeated string args = 6; map<string,string> env = 7; } message McpServerIdRequest { int64 id = 1; } message McpServerList { repeated McpServer list = 1; } message McpExposure { int64 id = 1; string chainId = 2; string toolName = 3; string description = 4; google.protobuf.Struct inputSchema = 5; bool enabled = 6; string createdAt = 7; string updatedAt = 8; } message McpExposureList { repeated McpExposure list = 1; } message ExposeMcpRequest { string chainId = 1; string toolName = 2; string description = 3; google.protobuf.Struct inputSchema = 4; } message ExposeMcpResponse { int64 id = 1; string toolName = 2; string mcpEndpoint = 3; } message McpTestResult { bool ok = 1; repeated string tools = 2; string error = 3; } message McpOk { bool ok = 1; }
+service McpService {
+  // Old: GET /api/v1/mcp/servers.
+  rpc ListServers(Empty) returns (McpServerList) { option (google.api.http) = { get: "/api/v1/mcp/servers" }; }
+  // Old: POST /api/v1/mcp/servers.
+  rpc CreateServer(McpServerInput) returns (McpServer) { option (google.api.http) = { post: "/api/v1/mcp/servers" body: "*" }; }
+  // Old: PUT /api/v1/mcp/servers/{id}.
+  rpc UpdateServer(McpServerRequest) returns (McpOk) { option (google.api.http) = { put: "/api/v1/mcp/servers/{id}" body: "*" }; }
+  // Old: DELETE /api/v1/mcp/servers/{id}.
+  rpc DeleteServer(McpServerIdRequest) returns (McpOk) { option (google.api.http) = { delete: "/api/v1/mcp/servers/{id}" }; }
+  // Old: POST /api/v1/mcp/servers/{id}/toggle.
+  rpc ToggleServer(McpServerIdRequest) returns (McpServer) { option (google.api.http) = { post: "/api/v1/mcp/servers/{id}/toggle" body: "*" }; }
+  // Old: POST /api/v1/mcp/servers/{id}/test.
+  rpc TestServer(McpServerIdRequest) returns (McpTestResult) { option (google.api.http) = { post: "/api/v1/mcp/servers/{id}/test" body: "*" }; }
+  // Old: GET /api/v1/mcp/exposures.
+  rpc ListExposures(Empty) returns (McpExposureList) { option (google.api.http) = { get: "/api/v1/mcp/exposures" }; }
+  // Old: POST /api/v1/chains/{id}/expose.
+  rpc Expose(ExposeMcpRequest) returns (ExposeMcpResponse) { option (google.api.http) = { post: "/api/v1/rule-chains/{chainId}/expose" body: "*" }; }
+  // Old: DELETE /api/v1/mcp/exposures/{id}.
+  rpc RemoveExposure(McpServerIdRequest) returns (McpOk) { option (google.api.http) = { delete: "/api/v1/mcp/exposures/{id}" }; }
+}

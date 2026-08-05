@@ -206,7 +206,7 @@ function TraceRow({
           {t.nodeId}
         </span>
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center' }}>
-          {typeof t.durationMs === 'number' && (
+          {t.durationMs !== undefined && (
             <Tag style={{ marginRight: 0 }}>{t.durationMs} ms</Tag>
           )}
           {(t.relationType || t.flowType) && (

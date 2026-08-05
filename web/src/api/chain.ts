@@ -1,4 +1,4 @@
-import http, { Page } from './http';
+import http, { Page, ProtoInt64, toPageQuery } from './http';
 
 export interface RuleChain {
   id: string;
@@ -35,7 +35,7 @@ export interface ChainInput {
 }
 
 export interface ChainVersion {
-  id: number;
+  id: ProtoInt64;
   chainId: string;
   version: number;
   dsl: unknown;
@@ -51,7 +51,7 @@ export interface NodeTrace {
   out?: string;
   input?: TraceMessage;
   output?: TraceMessage;
-  durationMs?: number;
+  durationMs?: ProtoInt64;
   err?: string;
 }
 
@@ -63,7 +63,7 @@ export interface TraceMessage {
 }
 
 export interface RunResult {
-  runId: number;
+  runId: ProtoInt64;
   status: string;
   output: string;
   error: string;
@@ -83,19 +83,19 @@ export interface ValidateResult {
 
 export const chainApi = {
   list: (params: { status?: string; keyword?: string; page?: number; pageSize?: number }) =>
-    http.get<unknown, Page<ChainListItem>>('/chains', { params }),
-  get: (id: string) => http.get<unknown, RuleChain>(`/chains/${id}`),
-  create: (in_: ChainInput) => http.post<unknown, RuleChain>('/chains', in_),
-  update: (id: string, in_: ChainInput) => http.put<unknown, unknown>(`/chains/${id}`, in_),
-  remove: (id: string) => http.delete<unknown, unknown>(`/chains/${id}`),
-  validate: (dsl: unknown) => http.post<unknown, ValidateResult>('/chains/validate', { dsl }),
-  publish: (id: string) => http.post<unknown, { version: number }>(`/chains/${id}/publish`),
-  offline: (id: string) => http.post<unknown, unknown>(`/chains/${id}/offline`),
-  versions: (id: string) => http.get<unknown, { list: ChainVersion[] }>(`/chains/${id}/versions`),
-  rollback: (id: string, version: number) => http.post<unknown, unknown>(`/chains/${id}/rollback`, { version }),
-  export: (id: string) => http.get<unknown, { name: string; description: string; version: number; dsl: unknown }>(`/chains/${id}/export`),
+    http.get<unknown, Page<ChainListItem>>('/rule-chains', { params: toPageQuery(params) }),
+  get: (id: string) => http.get<unknown, RuleChain>(`/rule-chains/${id}`),
+  create: (in_: ChainInput) => http.post<unknown, RuleChain>('/rule-chains', in_),
+  update: (id: string, in_: ChainInput) => http.put<unknown, unknown>(`/rule-chains/${id}`, in_),
+  remove: (id: string) => http.delete<unknown, unknown>(`/rule-chains/${id}`),
+  validate: (dsl: unknown) => http.post<unknown, ValidateResult>('/rule-chains/validate', { dsl }),
+  publish: (id: string) => http.post<unknown, { version: number }>(`/rule-chains/${id}/publish`),
+  offline: (id: string) => http.post<unknown, unknown>(`/rule-chains/${id}/offline`),
+  versions: (id: string) => http.get<unknown, { list: ChainVersion[] }>(`/rule-chains/${id}/versions`),
+  rollback: (id: string, version: number) => http.post<unknown, unknown>(`/rule-chains/${id}/rollback`, { version }),
+  export: (id: string) => http.get<unknown, { name: string; description: string; version: number; dsl: unknown }>(`/rule-chains/${id}/export`),
   import: (in_: { name: string; description?: string; dsl: unknown }) =>
-    http.post<unknown, RuleChain>('/chains/import', in_),
-  run: (id: string, in_: RunInput) => http.post<unknown, RunResult>(`/chains/${id}/run`, in_),
-  debug: (id: string, in_: RunInput) => http.post<unknown, RunResult>(`/chains/${id}/debug`, in_),
+    http.post<unknown, RuleChain>('/rule-chains/import', in_),
+  run: (id: string, in_: RunInput) => http.post<unknown, RunResult>(`/rule-chains/${id}/run`, in_),
+  debug: (id: string, in_: RunInput) => http.post<unknown, RunResult>(`/rule-chains/${id}/debug`, in_),
 };

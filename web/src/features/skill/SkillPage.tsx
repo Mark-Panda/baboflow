@@ -10,6 +10,7 @@ import type { ColumnsType } from 'antd/es/table';
 import type { UploadProps } from 'antd';
 
 import { skillApi, Skill, SkillFileItem } from '@/api/skill';
+import type { ProtoInt64 } from '@/api/http';
 
 const SOURCE_LABEL: Record<string, { color: string; text: string }> = {
   component: { color: 'blue', text: '系统组件' },
@@ -23,10 +24,12 @@ function SourceTag({ value }: { value: string }) {
   return <Tag color={m.color}>{m.text}</Tag>;
 }
 
-function formatSize(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+function formatSize(value: ProtoInt64): string {
+  const bytes = BigInt(value);
+  if (bytes < 1024n) return `${bytes} B`;
+  const divisor = bytes < 1024n * 1024n ? 1024n : 1024n * 1024n;
+  const unit = divisor === 1024n ? 'KB' : 'MB';
+  return `${bytes / divisor}.${(bytes % divisor) * 10n / divisor} ${unit}`;
 }
 
 export default function SkillPage() {
@@ -77,7 +80,7 @@ export default function SkillPage() {
   }, [load]);
 
   // 加载包文件清单（仅含包技能）
-  const loadFiles = useCallback(async (id: number) => {
+  const loadFiles = useCallback(async (id: ProtoInt64) => {
     setFilesLoading(true);
     try {
       const res = await skillApi.listFiles(id);

@@ -10,12 +10,13 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 
 import { llmApi, LLMModel, ModelInput, Provider, ProviderInput } from '@/api/llm';
+import type { ProtoInt64 } from '@/api/http';
 
 export default function LlmConfigPage() {
   const { message } = App.useApp();
   const [providers, setProviders] = useState<Provider[]>([]);
   const [loading, setLoading] = useState(false);
-  const [activeId, setActiveId] = useState<number | null>(null);
+  const [activeId, setActiveId] = useState<ProtoInt64 | null>(null);
   const [models, setModels] = useState<LLMModel[]>([]);
   const [modelLoading, setModelLoading] = useState(false);
 
@@ -39,7 +40,7 @@ export default function LlmConfigPage() {
     }
   }, [activeId]);
 
-  const loadModels = useCallback(async (pid: number) => {
+  const loadModels = useCallback(async (pid: ProtoInt64) => {
     setModelLoading(true);
     try {
       const res = await llmApi.listModels(pid);

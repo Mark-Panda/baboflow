@@ -1,17 +1,17 @@
-import http from './http';
+import http, { ProtoInt64 } from './http';
 
 // ---- 类型 ----
 
 export interface Agent {
-  id: number;
+  id: ProtoInt64;
   key: string;
   name: string;
   instruction: string;
-  llmModelId?: number;
-  skillIds: number[];
-  mcpIds: number[];
+  llmModelId?: ProtoInt64;
+  skillIds: ProtoInt64[];
+  mcpIds: ProtoInt64[];
   builtinTools: string[];
-  subAgentIds: number[];
+  subAgentIds: ProtoInt64[];
   isBuiltin: boolean;
   enabled: boolean;
   updatedAt: string;
@@ -20,11 +20,11 @@ export interface Agent {
 export interface AgentInput {
   name: string;
   instruction?: string;
-  llmModelId?: number;
-  skillIds?: number[];
-  mcpIds?: number[];
+  llmModelId?: ProtoInt64;
+  skillIds?: ProtoInt64[];
+  mcpIds?: ProtoInt64[];
   builtinTools?: string[];
-  subAgentIds?: number[];
+  subAgentIds?: ProtoInt64[];
   enabled?: boolean;
 }
 
@@ -54,13 +54,13 @@ export interface AgentQuestion {
 }
 
 export interface AttachmentRef {
-  assetId: number;
+  assetId: ProtoInt64;
   name: string;
   mime: string;
 }
 
 export interface AgentMessage {
-  id: number;
+  id: ProtoInt64;
   sessionId: string;
   role: 'user' | 'assistant' | 'tool' | 'system';
   content: string;
@@ -71,10 +71,10 @@ export interface AgentMessage {
 }
 
 export interface Asset {
-  id: number;
+  id: ProtoInt64;
   name: string;
   mime: string;
-  size: number;
+  size: ProtoInt64;
   sessionId: string;
   createdAt: string;
 }
@@ -104,19 +104,19 @@ export function deleteAgent(key: string): Promise<{ ok: boolean }> {
 // ---- 会话 ----
 
 export function listSessions(agentKey: string): Promise<{ list: AgentSession[] }> {
-  return http.get(`/agents/${encodeURIComponent(agentKey)}/sessions`) as never;
+  return http.get('/agent-sessions', { params: { agentKey } }) as never;
 }
 
 export function createSession(agentKey: string, title?: string, chainId?: string): Promise<AgentSession> {
-  return http.post(`/agents/${encodeURIComponent(agentKey)}/sessions`, { title, chainId }) as never;
+  return http.post('/agent-sessions', { agentKey, title, chainId }) as never;
 }
 
 export function deleteSession(sessionId: string): Promise<{ ok: boolean }> {
-  return http.delete(`/agents/sessions/${encodeURIComponent(sessionId)}`) as never;
+  return http.delete(`/agent-sessions/${encodeURIComponent(sessionId)}`) as never;
 }
 
 export function listMessages(sessionId: string): Promise<{ list: AgentMessage[] }> {
-  return http.get(`/agents/sessions/${encodeURIComponent(sessionId)}/messages`) as never;
+  return http.get(`/agent-sessions/${encodeURIComponent(sessionId)}/messages`) as never;
 }
 
 // ---- 附件 ----
@@ -125,11 +125,11 @@ export function uploadAsset(sessionId: string, file: File): Promise<Asset> {
   const fd = new FormData();
   fd.append('sessionId', sessionId);
   fd.append('file', file);
-  return http.post('/agents/assets', fd, {
+  return http.post('/agent-assets', fd, {
     headers: { 'Content-Type': 'multipart/form-data' },
   }) as never;
 }
 
-export function assetUrl(assetId: number): string {
-  return `/api/v1/agents/assets/${assetId}`;
+export function assetUrl(assetId: ProtoInt64): string {
+  return `/api/v1/agent-assets/${assetId}`;
 }

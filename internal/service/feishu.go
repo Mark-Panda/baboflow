@@ -9,7 +9,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"baboflow/internal/biz"
-	"baboflow/internal/server/httputil"
 )
 
 // feishuStateCookie 存放 OAuth state 的短期 HttpOnly cookie（防 CSRF）。
@@ -36,7 +35,7 @@ func (h *FeishuHandler) audit(c *gin.Context, uid *int64, action, targetID strin
 // GET /api/v1/auth/feishu/login
 func (h *FeishuHandler) Login(c *gin.Context) {
 	if !h.uc.Configured() {
-		httputil.BadRequest(c, biz.ErrFeishuNotConfigured.Error())
+		ginError(c, http.StatusBadRequest, biz.ErrFeishuNotConfigured.Error())
 		return
 	}
 	state := newOAuthState()

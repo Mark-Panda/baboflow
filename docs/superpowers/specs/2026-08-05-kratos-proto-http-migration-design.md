@@ -95,7 +95,7 @@ kgrpc.Server + Register*Server
 |------|------|
 | Agent 资产上传 | `POST /api/v1/agent-assets`（multipart） |
 | Agent 资产读取 | `GET /api/v1/agent-assets/{assetId}` |
-| Skill 包上传 | `POST /api/v1/skills:upload-package`（multipart） |
+| Skill 包上传 | `POST /api/v1/skills/package`（multipart） |
 | Skill 包下载 | `GET /api/v1/skills/{id}/package` |
 | Skill Markdown 上传 | 默认旁路 multipart；若改为 JSON body 则可进 proto |
 

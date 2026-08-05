@@ -11,6 +11,7 @@ import type { ColumnsType } from 'antd/es/table';
 
 import { mcpApi, McpServer, McpServerInput, McpExposure, McpTransport } from '@/api/mcp';
 import { chainApi, ChainListItem } from '@/api/chain';
+import type { ProtoInt64 } from '@/api/http';
 import InputSchemaField from '@/features/chain/canvas/InputSchemaField';
 
 const TRANSPORT_LABEL: Record<string, string> = {
@@ -42,7 +43,7 @@ function ServerPanel() {
   const { message } = App.useApp();
   const [data, setData] = useState<McpServer[]>([]);
   const [loading, setLoading] = useState(false);
-  const [testing, setTesting] = useState<number | null>(null);
+  const [testing, setTesting] = useState<ProtoInt64 | null>(null);
 
   const [editOpen, setEditOpen] = useState(false);
   const [editing, setEditing] = useState<McpServer | null>(null);

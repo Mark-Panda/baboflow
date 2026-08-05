@@ -1,34 +1,34 @@
-import http from './http';
+import http, { ProtoInt64 } from './http';
 
 // ---- 看板 ----
 
 export interface BoardTask {
-  id: number;
-  columnId: number;
+  id: ProtoInt64;
+  columnId: ProtoInt64;
   title: string;
   payload: string;
   status: 'pending' | 'running' | 'success' | 'failure' | string;
   assignedChainId?: string;
-  runId?: number;
+  runId?: ProtoInt64;
   result?: { output?: string; error?: string };
   retryMax: number;
   retryCount: number;
   timeoutSec: number;
-  sort: number;
+  sort: ProtoInt64;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface BoardColumn {
-  id: number;
-  boardId: number;
+  id: ProtoInt64;
+  boardId: ProtoInt64;
   name: string;
-  sort: number;
+  sort: ProtoInt64;
   tasks: BoardTask[];
 }
 
 export interface Board {
-  id: number;
+  id: ProtoInt64;
   name: string;
   description: string;
   createdAt: string;
@@ -46,7 +46,7 @@ export interface BoardInput {
 
 export interface ColumnInput {
   name: string;
-  sort?: number;
+  sort?: ProtoInt64;
 }
 
 export interface TaskInput {
@@ -60,21 +60,21 @@ export interface TaskInput {
 export const boardApi = {
   list: () => http.get<unknown, { list: Board[] }>('/boards'),
   create: (in_: BoardInput) => http.post<unknown, Board>('/boards', in_),
-  get: (id: number) => http.get<unknown, BoardDetail>(`/boards/${id}`),
-  update: (id: number, in_: BoardInput) => http.put<unknown, unknown>(`/boards/${id}`, in_),
-  remove: (id: number) => http.delete<unknown, unknown>(`/boards/${id}`),
+  get: (id: ProtoInt64) => http.get<unknown, BoardDetail>(`/boards/${id}`),
+  update: (id: ProtoInt64, in_: BoardInput) => http.put<unknown, unknown>(`/boards/${id}`, in_),
+  remove: (id: ProtoInt64) => http.delete<unknown, unknown>(`/boards/${id}`),
 
-  createColumn: (boardId: number, in_: ColumnInput) =>
-    http.post<unknown, BoardColumn>(`/boards/${boardId}/columns`, in_),
-  updateColumn: (columnId: number, in_: ColumnInput) =>
-    http.put<unknown, unknown>(`/boards/columns/${columnId}`, in_),
-  removeColumn: (columnId: number) => http.delete<unknown, unknown>(`/boards/columns/${columnId}`),
+  createColumn: (boardId: ProtoInt64, in_: ColumnInput) =>
+    http.post<unknown, BoardColumn>('/board-columns', { boardId, ...in_ }),
+  updateColumn: (columnId: ProtoInt64, in_: ColumnInput) =>
+    http.put<unknown, unknown>(`/board-columns/${columnId}`, { id: columnId, ...in_ }),
+  removeColumn: (columnId: ProtoInt64) => http.delete<unknown, unknown>(`/board-columns/${columnId}`),
 
-  createTask: (columnId: number, in_: TaskInput) =>
-    http.post<unknown, BoardTask>(`/boards/columns/${columnId}/tasks`, in_),
-  updateTask: (id: number, in_: TaskInput) => http.put<unknown, unknown>(`/tasks/${id}`, in_),
-  removeTask: (id: number) => http.delete<unknown, unknown>(`/tasks/${id}`),
-  moveTask: (id: number, toColumnId: number, toSort: number) =>
+  createTask: (columnId: ProtoInt64, in_: TaskInput) =>
+    http.post<unknown, BoardTask>('/tasks', { columnId, ...in_ }),
+  updateTask: (id: ProtoInt64, in_: TaskInput) => http.put<unknown, unknown>(`/tasks/${id}`, { id, ...in_ }),
+  removeTask: (id: ProtoInt64) => http.delete<unknown, unknown>(`/tasks/${id}`),
+  moveTask: (id: ProtoInt64, toColumnId: ProtoInt64, toSort: ProtoInt64) =>
     http.post<unknown, unknown>(`/tasks/${id}/move`, { toColumnId, toSort }),
-  triggerTask: (id: number) => http.post<unknown, BoardTask>(`/tasks/${id}/trigger`),
+  triggerTask: (id: ProtoInt64) => http.post<unknown, BoardTask>(`/tasks/${id}/trigger`),
 };

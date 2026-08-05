@@ -1,9 +1,9 @@
-import http from './http';
+import http, { ProtoInt64 } from './http';
 
 // Archery 连接：只含地址+凭据；实例由"更新实例"从 Archery 拉取，不在此填写。
 // 凭据加密存库，密码仅回脱敏掩码。
 export interface ArcheryConnection {
-  id: number;
+  id: ProtoInt64;
   name: string;
   endpoint: string;
   username: string;
@@ -29,8 +29,8 @@ export interface ArcheryConnectionInput {
 
 // Archery 实例：某连接下一个可查询数据源（由同步产生）。
 export interface ArcheryInstance {
-  id: number;
-  connectionId: number;
+  id: ProtoInt64;
+  connectionId: ProtoInt64;
   instanceName: string;
   dbType: string;
 }
@@ -43,18 +43,18 @@ export interface ArcheryTestResult {
 
 export const archeryApi = {
   listConnections: () => http.get<unknown, { list: ArcheryConnection[] }>('/archery/connections'),
-  getConnection: (id: number) => http.get<unknown, ArcheryConnection>(`/archery/connections/${id}`),
+  getConnection: (id: ProtoInt64) => http.get<unknown, ArcheryConnection>(`/archery/connections/${id}`),
   createConnection: (in_: ArcheryConnectionInput) =>
-    http.post<unknown, { id: number }>('/archery/connections', in_),
-  updateConnection: (id: number, in_: ArcheryConnectionInput) =>
+    http.post<unknown, { id: ProtoInt64 }>('/archery/connections', in_),
+  updateConnection: (id: ProtoInt64, in_: ArcheryConnectionInput) =>
     http.put<unknown, unknown>(`/archery/connections/${id}`, in_),
-  deleteConnection: (id: number) => http.delete<unknown, unknown>(`/archery/connections/${id}`),
-  setDefaultConnection: (id: number) => http.post<unknown, unknown>(`/archery/connections/${id}/default`),
-  clearDefaultConnection: (id: number) => http.delete<unknown, unknown>(`/archery/connections/${id}/default`),
-  testConnection: (id: number) =>
+  deleteConnection: (id: ProtoInt64) => http.delete<unknown, unknown>(`/archery/connections/${id}`),
+  setDefaultConnection: (id: ProtoInt64) => http.post<unknown, unknown>(`/archery/connections/${id}/default`),
+  clearDefaultConnection: (id: ProtoInt64) => http.delete<unknown, unknown>(`/archery/connections/${id}/default`),
+  testConnection: (id: ProtoInt64) =>
     http.post<unknown, ArcheryTestResult>(`/archery/connections/${id}/test`),
-  listInstances: (connectionId: number) =>
+  listInstances: (connectionId: ProtoInt64) =>
     http.get<unknown, { list: ArcheryInstance[] }>(`/archery/connections/${connectionId}/instances`),
-  syncInstances: (connectionId: number) =>
+  syncInstances: (connectionId: ProtoInt64) =>
     http.post<unknown, { list: ArcheryInstance[] }>(`/archery/connections/${connectionId}/sync-instances`),
 };

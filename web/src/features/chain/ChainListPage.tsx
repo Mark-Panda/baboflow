@@ -12,6 +12,7 @@ import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 
 import { chainApi, ChainListItem } from '@/api/chain';
+import { toSafeNumber } from '@/api/http';
 import { skillApi } from '@/api/skill';
 import StatusTag from '@/components/StatusTag';
 
@@ -30,7 +31,7 @@ export default function ChainListPage() {
     try {
       const res = await chainApi.list({ keyword, page, pageSize });
       setData(res.list || []);
-      setTotal(res.total || 0);
+      setTotal(res.page ? toSafeNumber(res.page.total, 'rule chain total') : 0);
     } catch {
       /* 拦截器已提示 */
     } finally {

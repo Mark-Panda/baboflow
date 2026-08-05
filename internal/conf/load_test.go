@@ -49,8 +49,8 @@ func TestLoadWithFile_FallsBackToDefault(t *testing.T) {
 	// 环境变量与配置文件都没有 → 用代码默认值。
 	p := writeTempConfig(t, `httpAddr: ":18000"`)
 	cfg := LoadWithFile(p)
-	if cfg.GRPCAddr != ":9000" {
-		t.Fatalf("expected default grpcAddr :9000, got %q", cfg.GRPCAddr)
+	if cfg.GRPCAddr != "127.0.0.1:9000" {
+		t.Fatalf("expected default grpcAddr 127.0.0.1:9000, got %q", cfg.GRPCAddr)
 	}
 	if cfg.EmbeddingDim != 1536 {
 		t.Fatalf("expected default embeddingDim 1536, got %d", cfg.EmbeddingDim)

@@ -3,12 +3,14 @@ package service
 import (
 	"errors"
 	"io"
+	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
 	"baboflow/internal/biz"
-	"baboflow/internal/server/httputil"
 )
 
 type AgentHandler struct {
@@ -17,6 +19,15 @@ type AgentHandler struct {
 
 const maxAssetUploadBytes = 20 << 20
 
+type agentAssetResponse struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Mime      string `json:"mime"`
+	Size      string `json:"size"`
+	SessionID string `json:"sessionId"`
+	CreatedAt string `json:"createdAt"`
+}
+
 func NewAgentHandler(uc *biz.AgentUsecase) *AgentHandler {
 	return &AgentHandler{uc: uc}
 }
@@ -24,147 +35,41 @@ func NewAgentHandler(uc *biz.AgentUsecase) *AgentHandler {
 func (h *AgentHandler) agentErr(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, gorm.ErrRecordNotFound), errors.Is(err, biz.ErrNotFound):
-		httputil.NotFound(c, "资源不存在")
+		ginError(c, http.StatusNotFound, "资源不存在")
 	default:
-		httputil.BadRequest(c, err.Error())
+		ginError(c, http.StatusBadRequest, err.Error())
 	}
 }
-
-// ---- Agent CRUD ----
-
-func (h *AgentHandler) List(c *gin.Context) {
-	list, err := h.uc.List(c.Request.Context(), c.Query("keyword"))
-	if err != nil {
-		httputil.Internal(c, err.Error())
-		return
-	}
-	httputil.OK(c, gin.H{"list": list})
-}
-
-func (h *AgentHandler) Get(c *gin.Context) {
-	v, err := h.uc.Get(c.Request.Context(), c.Param("key"))
-	if err != nil {
-		h.agentErr(c, err)
-		return
-	}
-	httputil.OK(c, v)
-}
-
-type createAgentReq struct {
-	Key string `json:"key" binding:"required"`
-	biz.AgentInput
-}
-
-func (h *AgentHandler) Create(c *gin.Context) {
-	var in createAgentReq
-	if err := c.ShouldBindJSON(&in); err != nil {
-		httputil.BadRequest(c, "参数错误: "+err.Error())
-		return
-	}
-	v, err := h.uc.Create(c.Request.Context(), in.Key, &in.AgentInput)
-	if err != nil {
-		h.agentErr(c, err)
-		return
-	}
-	httputil.OK(c, v)
-}
-
-func (h *AgentHandler) Update(c *gin.Context) {
-	var in biz.AgentInput
-	if err := c.ShouldBindJSON(&in); err != nil {
-		httputil.BadRequest(c, "参数错误: "+err.Error())
-		return
-	}
-	if err := h.uc.Update(c.Request.Context(), c.Param("key"), &in); err != nil {
-		h.agentErr(c, err)
-		return
-	}
-	httputil.OK(c, gin.H{"ok": true})
-}
-
-func (h *AgentHandler) Delete(c *gin.Context) {
-	if err := h.uc.Delete(c.Request.Context(), c.Param("key")); err != nil {
-		h.agentErr(c, err)
-		return
-	}
-	httputil.OK(c, gin.H{"ok": true})
-}
-
-// ---- 会话 ----
-
-func (h *AgentHandler) ListSessions(c *gin.Context) {
-	list, err := h.uc.ListSessions(c.Request.Context(), c.Param("key"), CurrentUserID(c))
-	if err != nil {
-		httputil.Internal(c, err.Error())
-		return
-	}
-	httputil.OK(c, gin.H{"list": list})
-}
-
-type createSessionReq struct {
-	Title   string `json:"title"`
-	ChainID string `json:"chainId"`
-}
-
-func (h *AgentHandler) CreateSession(c *gin.Context) {
-	var in createSessionReq
-	_ = c.ShouldBindJSON(&in)
-	s, err := h.uc.CreateChainSession(c.Request.Context(), c.Param("key"), in.Title, in.ChainID, CurrentUserID(c))
-	if err != nil {
-		h.agentErr(c, err)
-		return
-	}
-	httputil.OK(c, s)
-}
-
-func (h *AgentHandler) DeleteSession(c *gin.Context) {
-	if err := h.uc.DeleteSession(c.Request.Context(), c.Param("sessionId"), CurrentUserID(c)); err != nil {
-		h.agentErr(c, err)
-		return
-	}
-	httputil.OK(c, gin.H{"ok": true})
-}
-
-func (h *AgentHandler) ListMessages(c *gin.Context) {
-	list, err := h.uc.ListMessages(c.Request.Context(), c.Param("sessionId"), CurrentUserID(c))
-	if err != nil {
-		h.agentErr(c, err)
-		return
-	}
-	httputil.OK(c, gin.H{"list": list})
-}
-
-// ---- 附件 ----
 
 // UploadAsset 处理 multipart 文件上传（字段 file，query sessionId）。
 func (h *AgentHandler) UploadAsset(c *gin.Context) {
 	sessionID := c.PostForm("sessionId")
 	if sessionID == "" {
-		httputil.BadRequest(c, "缺少 sessionId")
+		ginError(c, http.StatusBadRequest, "缺少 sessionId")
 		return
 	}
 	fh, err := c.FormFile("file")
 	if err != nil {
-		httputil.BadRequest(c, "缺少文件: "+err.Error())
+		ginError(c, http.StatusBadRequest, "缺少文件: "+err.Error())
 		return
 	}
 	if fh.Size > maxAssetUploadBytes {
-		httputil.BadRequest(c, "文件超过 20MB 上限")
+		ginError(c, http.StatusBadRequest, "文件超过 20MB 上限")
 		return
 	}
 	f, err := fh.Open()
 	if err != nil {
-		httputil.Internal(c, err.Error())
+		ginError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 	defer f.Close()
 	data, err := io.ReadAll(io.LimitReader(f, maxAssetUploadBytes+1))
 	if err != nil {
-		httputil.Internal(c, err.Error())
+		ginError(c, http.StatusInternalServerError, err.Error())
 		return
 	}
 	if len(data) > maxAssetUploadBytes {
-		httputil.BadRequest(c, "文件超过 20MB 上限")
+		ginError(c, http.StatusBadRequest, "文件超过 20MB 上限")
 		return
 	}
 	asset, err := h.uc.SaveAsset(c.Request.Context(), sessionID, fh.Filename, data, CurrentUserID(c))
@@ -172,7 +77,14 @@ func (h *AgentHandler) UploadAsset(c *gin.Context) {
 		h.agentErr(c, err)
 		return
 	}
-	httputil.OK(c, asset)
+	c.JSON(http.StatusOK, agentAssetResponse{
+		ID:        strconv.FormatInt(asset.ID, 10),
+		Name:      asset.Name,
+		Mime:      asset.Mime,
+		Size:      strconv.FormatInt(asset.Size, 10),
+		SessionID: asset.SessionID,
+		CreatedAt: asset.CreatedAt.Format(time.RFC3339Nano),
+	})
 }
 
 // GetAsset 下载附件内容。
@@ -188,5 +100,5 @@ func (h *AgentHandler) GetAsset(c *gin.Context) {
 	}
 	c.Header("Content-Type", asset.Mime)
 	c.Header("Content-Disposition", "inline; filename=\""+asset.Name+"\"")
-	c.Data(200, asset.Mime, data)
+	c.Data(http.StatusOK, asset.Mime, data)
 }

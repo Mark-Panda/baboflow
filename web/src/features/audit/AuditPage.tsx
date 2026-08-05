@@ -5,6 +5,7 @@ import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 
 import { auditApi, AuditLog, AUDIT_ACTIONS, auditActionLabel } from '@/api/audit';
+import { toSafeNumber } from '@/api/http';
 
 const ACTION_COLOR: Record<string, string> = {
   'auth.login_failed': 'red',
@@ -30,7 +31,7 @@ export default function AuditPage() {
     try {
       const res = await auditApi.list({ action, page, pageSize });
       setData(res.list || []);
-      setTotal(res.total || 0);
+      setTotal(res.page ? toSafeNumber(res.page.total, 'audit total') : 0);
     } catch {
       /* 拦截器已提示 */
     } finally {

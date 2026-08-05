@@ -7,4 +7,5 @@ import (
 // ProviderSet server 层依赖。
 var ProviderSet = wire.NewSet(
 	NewHTTPServer,
+	NewGRPCServer,
 )

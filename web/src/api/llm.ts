@@ -1,7 +1,7 @@
-import http from './http';
+import http, { ProtoInt64 } from './http';
 
 export interface Provider {
-  id: number;
+  id: ProtoInt64;
   name: string;
   provider: string;
   baseUrl: string;
@@ -21,8 +21,8 @@ export interface ProviderInput {
 }
 
 export interface LLMModel {
-  id: number;
-  providerId: number;
+  id: ProtoInt64;
+  providerId: ProtoInt64;
   model: string;
   alias: string;
   temperature: number;
@@ -44,25 +44,25 @@ export interface ModelInput {
 
 export interface TestResult {
   ok: boolean;
-  latencyMs?: number;
+  latencyMs?: ProtoInt64;
   message?: string;
 }
 
 export const llmApi = {
   // 接入点
   listProviders: () => http.get<unknown, { list: Provider[] }>('/llm/providers'),
-  createProvider: (in_: ProviderInput) => http.post<unknown, { id: number }>('/llm/providers', in_),
-  updateProvider: (id: number, in_: ProviderInput) => http.put<unknown, unknown>(`/llm/providers/${id}`, in_),
-  deleteProvider: (id: number) => http.delete<unknown, unknown>(`/llm/providers/${id}`),
-  testProvider: (id: number) => http.post<unknown, TestResult>(`/llm/providers/${id}/test`),
-  remoteModels: (id: number) => http.get<unknown, { models: string[] }>(`/llm/providers/${id}/models/remote`),
+  createProvider: (in_: ProviderInput) => http.post<unknown, { id: ProtoInt64 }>('/llm/providers', in_),
+  updateProvider: (id: ProtoInt64, in_: ProviderInput) => http.put<unknown, unknown>(`/llm/providers/${id}`, in_),
+  deleteProvider: (id: ProtoInt64) => http.delete<unknown, unknown>(`/llm/providers/${id}`),
+  testProvider: (id: ProtoInt64) => http.post<unknown, TestResult>(`/llm/providers/${id}/test`),
+  remoteModels: (id: ProtoInt64) => http.get<unknown, { models: string[] }>(`/llm/providers/${id}/models/remote`),
 
   // 模型
-  listModels: (providerId: number) => http.get<unknown, { list: LLMModel[] }>(`/llm/providers/${providerId}/models`),
-  createModels: (providerId: number, models: ModelInput[]) =>
+  listModels: (providerId: ProtoInt64) => http.get<unknown, { list: LLMModel[] }>(`/llm/providers/${providerId}/models`),
+  createModels: (providerId: ProtoInt64, models: ModelInput[]) =>
     http.post<unknown, unknown>(`/llm/providers/${providerId}/models`, { models }),
-  updateModel: (modelId: number, in_: ModelInput) => http.put<unknown, unknown>(`/llm/models/${modelId}`, in_),
-  deleteModel: (modelId: number) => http.delete<unknown, unknown>(`/llm/models/${modelId}`),
-  setDefaultModel: (modelId: number) => http.post<unknown, unknown>(`/llm/models/${modelId}/default`),
-  testModel: (modelId: number) => http.post<unknown, TestResult>(`/llm/models/${modelId}/test`),
+  updateModel: (modelId: ProtoInt64, in_: ModelInput) => http.put<unknown, unknown>(`/llm/models/${modelId}`, in_),
+  deleteModel: (modelId: ProtoInt64) => http.delete<unknown, unknown>(`/llm/models/${modelId}`),
+  setDefaultModel: (modelId: ProtoInt64) => http.post<unknown, unknown>(`/llm/models/${modelId}/default`),
+  testModel: (modelId: ProtoInt64) => http.post<unknown, TestResult>(`/llm/models/${modelId}/test`),
 };

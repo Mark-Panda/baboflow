@@ -2,11 +2,23 @@ package service
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"testing"
 
 	"baboflow/internal/biz"
 	"baboflow/internal/biz/agentkit"
 )
+
+func TestWsInboundAcceptsProtoInt64AssetIDs(t *testing.T) {
+	var inbound wsInbound
+	if err := json.Unmarshal([]byte(`{"action":"input","channel":"agent-chat","assetIds":["9007199254740993","9"]}`), &inbound); err != nil {
+		t.Fatalf("unmarshal string assetIds: %v", err)
+	}
+	if got := fmt.Sprint(inbound.AssetIDs); got != "[9007199254740993 9]" {
+		t.Fatalf("assetIds = %s, want string IDs", got)
+	}
+}
 
 func TestWsConnectionContextSurvivesRequestCancellation(t *testing.T) {
 	requestCtx, cancelRequest := context.WithCancel(context.WithValue(context.Background(), "request-key", "request-value"))

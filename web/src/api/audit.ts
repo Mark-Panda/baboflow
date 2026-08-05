@@ -1,10 +1,10 @@
-import http, { Page } from './http';
+import http, { Page, ProtoInt64, toPageQuery } from './http';
 
 // ---- 审计日志 ----
 
 export interface AuditLog {
-  id: number;
-  userId?: number;
+  id: ProtoInt64;
+  userId?: ProtoInt64;
   action: string;
   targetType: string;
   targetId: string;
@@ -14,8 +14,8 @@ export interface AuditLog {
 }
 
 export const auditApi = {
-  list: (params: { action?: string; userId?: number; page?: number; pageSize?: number }) =>
-    http.get<unknown, Page<AuditLog>>('/audit', { params }),
+  list: (params: { action?: string; userId?: ProtoInt64; page?: number; pageSize?: number }) =>
+    http.get<unknown, Page<AuditLog>>('/audit-logs', { params: toPageQuery(params) }),
 };
 
 // 动作 → 中文标签（与后端 AuditXxx 常量对应）

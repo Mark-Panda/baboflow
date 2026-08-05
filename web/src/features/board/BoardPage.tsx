@@ -11,6 +11,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 
 import { boardApi, BoardDetail, BoardTask, BoardColumn, TaskInput } from '@/api/board';
 import { chainApi, ChainListItem } from '@/api/chain';
+import type { ProtoInt64 } from '@/api/http';
 import StatusTag from '@/components/StatusTag';
 
 // 任务卡片
@@ -19,7 +20,7 @@ function TaskCard({
 }: {
   task: BoardTask;
   columns: BoardColumn[];
-  onMove: (task: BoardTask, toColumnId: number) => void;
+  onMove: (task: BoardTask, toColumnId: ProtoInt64) => void;
   onTrigger: (task: BoardTask) => void;
   onEdit: (task: BoardTask) => void;
   onDelete: (task: BoardTask) => void;
@@ -52,7 +53,7 @@ function TaskCard({
           menu={{
             items: [
               { key: 'run', icon: <PlayCircleOutlined />, label: '触发执行', disabled: !hasChain, onClick: () => onTrigger(task) },
-              ...moveItems.map((m) => ({ ...m, onClick: () => onMove(task, Number(m.key)) })),
+              ...moveItems.map((m) => ({ ...m, onClick: () => onMove(task, m.key) })),
               { type: 'divider' },
               { key: 'edit', label: '编辑', onClick: () => onEdit(task) },
               { key: 'del', icon: <DeleteOutlined />, label: '删除', danger: true, onClick: () => onDelete(task) },
@@ -74,18 +75,18 @@ function TaskCard({
 
 export default function BoardPage() {
   const { id } = useParams<{ id: string }>();
-  const boardId = Number(id);
+  const boardId = id ?? '';
   const navigate = useNavigate();
   const { message } = App.useApp();
 
   const [board, setBoard] = useState<BoardDetail | null>(null);
   const [loading, setLoading] = useState(false);
-  const [triggering, setTriggering] = useState<number | null>(null);
+  const [triggering, setTriggering] = useState<ProtoInt64 | null>(null);
   const [publishedChains, setPublishedChains] = useState<ChainListItem[]>([]);
 
   // 新建/编辑任务
   const [taskOpen, setTaskOpen] = useState(false);
-  const [taskColumn, setTaskColumn] = useState<number | null>(null);
+  const [taskColumn, setTaskColumn] = useState<ProtoInt64 | null>(null);
   const [editingTask, setEditingTask] = useState<BoardTask | null>(null);
   const [savingTask, setSavingTask] = useState(false);
   const [taskForm] = Form.useForm<TaskInput>();
@@ -119,7 +120,7 @@ export default function BoardPage() {
       .catch(() => { /* 拦截器已提示 */ });
   }, []);
 
-  const openCreateTask = (columnId: number) => {
+  const openCreateTask = (columnId: ProtoInt64) => {
     setEditingTask(null);
     setTaskColumn(columnId);
     taskForm.resetFields();
@@ -163,8 +164,8 @@ export default function BoardPage() {
     }
   };
 
-  const onMove = async (task: BoardTask, toColumnId: number) => {
-    await boardApi.moveTask(task.id, toColumnId, 0);
+  const onMove = async (task: BoardTask, toColumnId: ProtoInt64) => {
+    await boardApi.moveTask(task.id, toColumnId, '0');
     load();
   };
 

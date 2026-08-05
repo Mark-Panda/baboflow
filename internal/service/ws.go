@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -16,7 +17,6 @@ import (
 
 	"baboflow/internal/biz"
 	"baboflow/internal/biz/agentkit"
-	"baboflow/internal/server/httputil"
 )
 
 // WsFrame 服务端 → 客户端统一帧。
@@ -31,10 +31,10 @@ type wsInbound struct {
 	Action  string `json:"action"` // subscribe/unsubscribe/input
 	Channel string `json:"channel"`
 	// agent-chat
-	SessionID string  `json:"sessionId"`
-	AgentKey  string  `json:"agentKey"`
-	Content   string  `json:"content"`
-	AssetIDs  []int64 `json:"assetIds"`
+	SessionID string   `json:"sessionId"`
+	AgentKey  string   `json:"agentKey"`
+	Content   string   `json:"content"`
+	AssetIDs  []string `json:"assetIds"`
 	// ChainDSL 当前画布规则链 DSL（仅 agent-chain-builder 增量编辑时携带），
 	// 注入当轮对话上下文，不落库、不进历史。
 	ChainDSL string `json:"chainDsl,omitempty"`
@@ -103,12 +103,12 @@ func NewWsHub(agentUC *biz.AgentUsecase, auth *biz.AuthUsecase) *WsHub {
 func (h *WsHub) Handle(c *gin.Context) {
 	sid, err := c.Cookie(biz.SessionCookieName)
 	if err != nil || sid == "" {
-		httputil.Unauthorized(c, "未登录")
+		ginError(c, http.StatusUnauthorized, "未登录")
 		return
 	}
 	user, err := h.auth.Validate(c.Request.Context(), sid)
 	if err != nil {
-		httputil.Unauthorized(c, "会话已过期")
+		ginError(c, http.StatusUnauthorized, "会话已过期")
 		return
 	}
 	conn, err := wsUpgrader.Upgrade(c.Writer, c.Request, nil)
@@ -265,7 +265,11 @@ func (h *WsHub) handleChatInput(wc *wsConn, in *wsInbound) {
 	runID := h.newRunID()
 
 	atts := make([]biz.ChatAttachment, 0, len(in.AssetIDs))
-	for _, id := range in.AssetIDs {
+	for _, assetID := range in.AssetIDs {
+		id, err := strconv.ParseInt(assetID, 10, 64)
+		if err != nil || id <= 0 {
+			return
+		}
 		atts = append(atts, biz.ChatAttachment{AssetID: id})
 	}
 

@@ -2,7 +2,7 @@
 
 > 技术栈：Kratos 最新(v2.x) · GORM 最新 · PostgreSQL(启用 pgvector) · aggo v2 · RuleGo 最新
 > 认证：Session(Cookie)，单租户 admin。除 `/api/v1/auth/*` 外全部接口需会话。
-> 统一响应信封：`{ "code":0, "message":"ok", "data":{...} }`；错误 `code!=0` 且 `message` 可读。
+> 历史 REST 设计曾使用统一响应信封。当前核心业务 API 已迁移到 Kratos proto HTTP/gRPC：成功响应为 protobuf JSON，失败响应为 Kratos 原生错误 JSON（按 HTTP status 与 `reason`/`message` 处理），不再使用旧业务信封。
 > 命名：DB 用 snake_case；JSON 出入参用 camelCase；`jsonb` 字段在注释中给出结构。
 
 ---
@@ -403,23 +403,21 @@ baboflow/
 
 ---
 
-## 第三部分：接口设计（REST + WebSocket）
+## 第三部分：历史接口与业务设计（REST + WebSocket）
 
-> 前缀 `/api/v1`。除 Auth 外均需 Cookie `baboflow_sid`。
-> 统一错误码：`0`成功；`400`参数错误；`401`未登录/会话过期；`403`无权限；`404`不存在；`409`冲突(如重名/已发布不可删)；`500`服务内部错误。
-> 分页请求统一 `page`(从1) `pageSize`(默认20)；分页响应 `data:{list:[...], total:100, page:1, pageSize:20}`。
+> 本部分保留路由、数据库与业务语义设计作为迁移参考，其中旧 REST Req/Resp 示例不代表当前线上响应结构。当前核心业务 API 前缀为 `/api/v1`，除 Auth 外均需 Cookie `baboflow_sid`。
+> 迁移后，成功响应直接序列化各 proto response message 为 protobuf JSON，不再使用 `{code,message,data}` 信封；分页结构以各 service 定义的 typed response 与 `page` 字段为准，不再统一解包 `data.list`。
+> proto HTTP 错误使用实际 HTTP status 与 Kratos 原生错误体，调用方读取 `message`/`reason`。HTTP 旁路端点及其错误格式遵循“第六部分：proto HTTP/gRPC 迁移实施说明”的现行约定。
 
 ### A. Auth 认证
 **POST `/api/v1/auth/login`** — 登录
 ```json
 // Req
 { "username":"admin", "password":"xxxx" }
-// Resp 200 (Set-Cookie: baboflow_sid=...; HttpOnly; SameSite=Lax)
-{ "code":0, "message":"ok", "data":{ "userId":1, "username":"admin", "displayName":"管理员" } }
-// 401: { "code":401, "message":"用户名或密码错误" }
 ```
-**POST `/api/v1/auth/logout`** — 登出（销毁会话）。Req 空；Resp `{code:0}`。
-**GET `/api/v1/auth/me`** — 当前登录信息。Resp `data:{userId,username,displayName}`；未登录 401。
+登录成功返回 `LoginReply` 的 proto JSON message，并设置 `baboflow_sid` Cookie（`HttpOnly`、`SameSite=Lax`）；认证失败返回 HTTP 401 与 Kratos `message`/`reason`。
+**POST `/api/v1/auth/logout`** — 登出（销毁会话）。Req 空；成功响应为 `LogoutReply` 的 proto JSON message。
+**GET `/api/v1/auth/me`** — 当前登录信息。成功响应为 `MeReply` 的 proto JSON message；未登录返回 HTTP 401。
 **PUT `/api/v1/auth/password`** — 修改密码。Req `{oldPassword,newPassword}`。
 
 ### B. LLM 配置（需求9）—— 两层：接入点(provider) + 模型(model)
@@ -726,7 +724,7 @@ detect(新增/变更/删除)
 - apiKey：AES-GCM，密钥 `BABO_SECRET`（32字节）经 **.env** 注入（Viper 读取；`.env` 提供 `.env.example`，不入版本库），入库为 `api_key_enc`，接口仅回掩码。
 - 密码：bcrypt。Session：随机 128-bit ID，HttpOnly Cookie，滑动过期（默认 7 天）。
 - 所有外部输入（DSL、SKILL 内容、看板 payload、WS 消息）经校验；RuleGo JS 脚本节点在受控引擎内执行。
-- `.env` 关键项：`BABO_SECRET`、`DATABASE_DSN`、`LANGFUSE_PUBLIC_KEY/SECRET_KEY/HOST`、`HTTP_ADDR`、`GRPC_ADDR`、`COMPONENT_SKILL_LLM`(组件 SKILL 是否用 LLM 润色, 默认 false 走模板)、`BABO_WORKSPACE`(Agent 内置工具沙箱目录, 默认 ./workspace)、`EXECUTOR_WORKERS`(规则链执行并发, 默认 8)、`BASH_ALLOWLIST`(bash 工具命令白名单, 逗号分隔, 空=黑名单模式)、`EMBEDDING_DIM`(向量维度, 默认 1536)、`EMBEDDING_MODEL_ID`(生成向量所用 llm_model.id, 可配置)、`ADMIN_INIT_PASSWORD`(首次启动 admin 初始密码, 登录后强制改密)。
+- `.env` 关键项：`BABO_SECRET`、`DATABASE_DSN`、`LANGFUSE_PUBLIC_KEY/SECRET_KEY/HOST`、`HTTP_ADDR`、`GRPC_ADDR`（默认 `127.0.0.1:9000`；仅在受控反向代理或专用网络需要时显式覆盖）、`COMPONENT_SKILL_LLM`(组件 SKILL 是否用 LLM 润色, 默认 false 走模板)、`BABO_WORKSPACE`(Agent 内置工具沙箱目录, 默认 ./workspace)、`EXECUTOR_WORKERS`(规则链执行并发, 默认 8)、`BASH_ALLOWLIST`(bash 工具命令白名单, 逗号分隔, 空=黑名单模式)、`EMBEDDING_DIM`(向量维度, 默认 1536)、`EMBEDDING_MODEL_ID`(生成向量所用 llm_model.id, 可配置)、`ADMIN_INIT_PASSWORD`(首次启动 admin 初始密码, 登录后强制改密)。
 
 ---
 
@@ -815,18 +813,27 @@ services:
       POSTGRES_USER: babo
       POSTGRES_PASSWORD: babo
       POSTGRES_DB: baboflow
-    volumes: ["pgdata:/var/lib/postgresql/data"]
-    healthcheck: { test: ["CMD-SHELL","pg_isready -U babo"], interval: 5s, retries: 10 }
-    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/db-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U babo -d baboflow"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    ports: ["0.0.0.0:5433:5432"]
 
   langfuse:
     image: langfuse/langfuse:2
     environment:
       DATABASE_URL: postgresql://babo:babo@db:5432/langfuse
-      NEXTAUTH_SECRET: changeme
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:-changeme-nextauth-secret}
       NEXTAUTH_URL: http://localhost:3001
-    depends_on: [db]
-    ports: ["3001:3001"]                   # Langfuse Web
+      SALT: ${LANGFUSE_SALT:-changeme-salt}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports: ["3001:3000"]                   # Langfuse Web
 
   baboflow:
     build: .
@@ -834,20 +841,54 @@ services:
       DATABASE_DSN: host=db user=babo password=babo dbname=baboflow port=5432 sslmode=disable
       BABO_SECRET: ${BABO_SECRET:-please-change-me-32bytes-secret!!}
       LANGFUSE_HOST: http://langfuse:3000
-      HTTP_ADDR: 0.0.0.0:8000
-      GRPC_ADDR: 0.0.0.0:9000
+      HTTP_ADDR: ":8000"
+      MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:-}
+      # 未设置 GRPC_ADDR：默认 127.0.0.1:9000，compose 不发布 gRPC 端口。
+      # 如需内网 gRPC，仅可通过受控网络配置显式覆盖 GRPC_ADDR。
       BABO_WORKSPACE: /app/workspace      # Agent 内置工具(bash/read/write/edit/grep)沙箱
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      ADMIN_INIT_PASSWORD: ${ADMIN_INIT_PASSWORD:-admin123}
     volumes:
       - workspace:/app/workspace           # 持久化 Agent 工作区
     depends_on:
-      db: { condition: service_healthy }
+      db:
+        condition: service_healthy
     ports:
-      - "8000:8000"   # HTTP/WS + 前端静态资源
-      - "9000:9000"   # gRPC
+      - "8001:8000"   # HTTP/WS + 前端静态资源 + /mcp
 volumes:
   pgdata:
   workspace:
 ```
 - 单容器内嵌前端 `dist`（Kratos 静态托管）+ 自动执行 DB migration（启动时 `CREATE EXTENSION IF NOT EXISTS vector` + AutoMigrate）。
-- `docker compose up -d` 一键拉起：db(pgvector) + langfuse + baboflow；浏览器访问 `http://localhost:8000`。
+- `docker compose up -d` 一键拉起：db(pgvector) + langfuse + baboflow；浏览器访问 `http://localhost:8001`。
 - `.env.example` 提供 `BABO_SECRET` 等默认值；生产通过环境变量覆盖。
+
+---
+
+## 第六部分：proto HTTP/gRPC 迁移实施说明（以当前实现为准）
+
+### 服务监听与暴露
+
+- HTTP 由 `HTTP_ADDR` 配置，默认 `:8000`，承载 proto HTTP、WebSocket、MCP、OAuth、静态资源与上传下载旁路。
+- gRPC 由 `GRPC_ADDR` 配置，默认 `127.0.0.1:9000`。它只供本机进程、受控反向代理或专用网络调用；生产环境不要将 `:9000` 直接映射到公网，应保持 loopback 绑定或在防火墙、网络策略中拒绝公网入站。
+- HTTP 与 gRPC 复用同一组 proto service 实现、会话认证与限流策略；HTTP 使用 `baboflow_sid` Cookie，gRPC 使用 metadata `authorization: Bearer <session-id>`。
+
+### 生成与资源目录
+
+核心业务契约位于 `api/baboflow/v1/`：`auth.proto`、`archery.proto`、`llm.proto`、`component.proto`、`rulechain.proto`、`agent.proto`、`skill.proto`、`mcp.proto`、`board.proto`、`audit.proto`、`cron.proto` 与公共定义 `common.proto`。每个业务 proto 声明 `google.api.http` 绑定，并生成同目录的 `*.pb.go`、`*_grpc.pb.go`、`*_http.pb.go`。
+
+修改 proto 后依次执行：
+
+```bash
+make api
+make generate
+```
+
+`make api` 生成 protobuf、gRPC 与 Kratos HTTP 代码；`make generate` 在此基础上执行 Wire 依赖注入生成。
+
+### HTTP 响应与旁路边界
+
+- proto HTTP 成功响应为 protobuf JSON；`int64`/`uint64` 在 JSON 中以十进制字符串表示，前端应保留字符串以避免 JavaScript 大整数精度丢失。错误由 Kratos 原生 ErrorEncoder 输出 JSON，调用方按 HTTP status 和 `reason`/`message` 处理，不能再解包旧 `{code,message,data}` 业务信封。
+- 以下端点不走 proto：`/healthz`、`/readyz`、`/metrics`、`/ws`、`/mcp/sse`、`/mcp/message`、`/api/v1/auth/feishu/login`、`/api/v1/auth/feishu/callback`、`/assets/*` 与 SPA 回退。
+- multipart/raw 下载仍是 HTTP 旁路：`POST /api/v1/agent-assets`、`GET /api/v1/agent-assets/{assetId}`、`POST /api/v1/skills/package`、`GET /api/v1/skills/{id}/package`。其中资产与技能包端点要求会话；MCP 端点要求会话或 `MCP_AUTH_TOKEN` Bearer。

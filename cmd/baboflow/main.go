@@ -9,6 +9,7 @@ import (
 	kratos "github.com/go-kratos/kratos/v2"
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/go-kratos/kratos/v2/middleware/tracing"
+	kgrpc "github.com/go-kratos/kratos/v2/transport/grpc"
 	khttp "github.com/go-kratos/kratos/v2/transport/http"
 	"github.com/joho/godotenv"
 	"gorm.io/gorm"
@@ -28,6 +29,7 @@ import (
 // HTTP server 本身由 wire 经 server.ProviderSet 构造完成。
 type App struct {
 	HTTPServer *khttp.Server
+	GRPCServer *kgrpc.Server
 
 	Cfg           *conf.Config
 	DB            *gorm.DB
@@ -44,20 +46,16 @@ type App struct {
 	CompRepo      biz.ComponentRepo
 	PlatformTools *biz.PlatformTools
 	Tracer        *agentkit.Tracer
+	RateLimiters  *service.RateLimiters
 
-	// 各 handler：仅用于注入审计器。
-	AuthH    *service.AuthHandler
-	FeishuH  *service.FeishuHandler
-	LLMH     *service.LLMHandler
-	ArcheryH *service.ArcheryHandler
-	ChainH   *service.RuleChainHandler
-	SkillH   *service.SkillHandler
-	McpH     *service.McpHandler
-	BoardH   *service.BoardHandler
+	// Gin 旁路 handler：仅用于注入审计器。
+	FeishuH *service.FeishuHandler
+	SkillH  *service.SkillHandler
 }
 
 func newApp(
 	httpSrv *khttp.Server,
+	grpcSrv *kgrpc.Server,
 	c *conf.Config,
 	db *gorm.DB,
 	chainUC *biz.RuleChainUsecase,
@@ -74,24 +72,19 @@ func newApp(
 	compRepo biz.ComponentRepo,
 	platformTools *biz.PlatformTools,
 	tracer *agentkit.Tracer,
-	authH *service.AuthHandler,
+	rateLimiters *service.RateLimiters,
 	feishuH *service.FeishuHandler,
-	llmH *service.LLMHandler,
-	archeryH *service.ArcheryHandler,
-	chainH *service.RuleChainHandler,
 	skillH *service.SkillHandler,
-	mcpH *service.McpHandler,
-	boardH *service.BoardHandler,
 ) *App {
 	app := &App{
-		HTTPServer: httpSrv, Cfg: c, DB: db,
+		HTTPServer: httpSrv, GRPCServer: grpcSrv, Cfg: c, DB: db,
 		ChainUC: chainUC, McpUC: mcpUC, CronUC: cronUC, BoardUC: boardUC,
 		SkillUC: skillUC, ArcheryUC: archeryUC, AuditUC: auditUC,
 		AgentManager: agentManager, Eng: eng, CompSync: compSync, CompRepo: compRepo,
 		PlatformTools: platformTools, Tracer: tracer,
-		AuthH: authH, LLMH: llmH, ArcheryH: archeryH, ChainH: chainH,
-		FeishuH: feishuH,
-		SkillH:  skillH, McpH: mcpH, BoardH: boardH,
+		RateLimiters: rateLimiters,
+		FeishuH:      feishuH,
+		SkillH:       skillH,
 	}
 	agentManager.SetMemoryDB(db, c)
 	agentUC.SetSessionMemoryCleaner(agentManager)
@@ -127,8 +120,9 @@ func main() {
 		kratos.Name("baboflow"),
 		kratos.Version("0.1.0"),
 		kratos.Logger(logger),
-		kratos.Server(app.HTTPServer),
+		kratos.Server(app.HTTPServer, app.GRPCServer),
 		kratos.AfterStop(func(context.Context) error {
+			app.RateLimiters.Stop()
 			app.CronUC.Stop()
 			app.BoardUC.Stop()
 			app.Eng.StopAll()
@@ -136,7 +130,7 @@ func main() {
 			return nil
 		}),
 	)
-	helper.Infof("baboflow 启动 HTTP %s", cfg.HTTPAddr)
+	helper.Infof("baboflow 启动 HTTP %s, gRPC %s", cfg.HTTPAddr, cfg.GRPCAddr)
 	if err := ka.Run(); err != nil {
 		helper.Fatalf("服务退出: %v", err)
 	}
@@ -196,15 +190,9 @@ func injectRuntime(app *App, helper *log.Helper) {
 	// 组件变更 → 自动同步对应 SKILL。
 	app.CompSync.SetOnComponentChange(app.SkillUC.SyncComponentSkill)
 
-	// 审计器（均 nil 守卫，可选）。
-	app.AuthH.SetAuditor(app.AuditUC)
+	// Gin 旁路审计器（proto service 已通过构造函数注入）。
 	app.FeishuH.SetAuditor(app.AuditUC)
-	app.LLMH.SetAuditor(app.AuditUC)
-	app.ArcheryH.SetAuditor(app.AuditUC)
-	app.ChainH.SetAuditor(app.AuditUC)
 	app.SkillH.SetAuditor(app.AuditUC)
-	app.McpH.SetAuditor(app.AuditUC)
-	app.BoardH.SetAuditor(app.AuditUC)
 }
 
 // boot 启动期恢复与后台任务：载入已发布规则链、恢复 MCP 暴露、启动 cron、周期组件同步。

@@ -1,58 +1,115 @@
 package service
 
 import (
+	"context"
+	"net"
+	"net/http"
 	"sync"
 	"time"
 
-	"github.com/gin-gonic/gin"
+	kerrors "github.com/go-kratos/kratos/v2/errors"
+	"github.com/go-kratos/kratos/v2/middleware"
+	khttp "github.com/go-kratos/kratos/v2/transport/http"
 	"golang.org/x/time/rate"
-
-	"baboflow/internal/server/httputil"
+	"google.golang.org/grpc/peer"
 )
 
-// RateLimitMiddleware 基于 x/time/rate 的每键令牌桶限流。
-// keyFunc 决定限流维度（如 IP、IP+账号）。b 为桶容量（突发），r 为每秒补充速率。
-// 超出后返回 429 风格错误。后台定期清理空闲键，防止 map 无限增长。
-func RateLimitMiddleware(keyFunc func(*gin.Context) string, r rate.Limit, b int) gin.HandlerFunc {
-	type entry struct {
-		limiter  *rate.Limiter
-		lastSeen time.Time
-	}
-	var mu sync.Mutex
-	buckets := map[string]*entry{}
+const rateLimitReason = "RATE_LIMITED"
 
-	// 后台清理 10 分钟未命中的键
+type rateLimitEntry struct {
+	limiter  *rate.Limiter
+	lastSeen time.Time
+}
+
+// RateLimiters owns the per-client login and trigger limiters for one app.
+// Stop must be called during application shutdown to stop their cleanup workers.
+type RateLimiters struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
+
+	login   middleware.Middleware
+	trigger middleware.Middleware
+}
+
+func NewRateLimiters() *RateLimiters {
+	ctx, cancel := context.WithCancel(context.Background())
+	limits := &RateLimiters{ctx: ctx, cancel: cancel}
+	limits.login = limits.newMiddleware("login:", rate.Every(2*time.Second), 5)
+	limits.trigger = limits.newMiddleware("trigger:", rate.Every(time.Second), 10)
+	return limits
+}
+
+func (r *RateLimiters) LoginMiddleware() middleware.Middleware { return r.login }
+
+func (r *RateLimiters) TriggerMiddleware() middleware.Middleware { return r.trigger }
+
+func (r *RateLimiters) Stop() {
+	r.cancel()
+	r.wg.Wait()
+}
+
+func (r *RateLimiters) newMiddleware(prefix string, limit rate.Limit, capacity int) middleware.Middleware {
+	var mu sync.Mutex
+	buckets := map[string]*rateLimitEntry{}
+	r.wg.Add(1)
 	go func() {
-		ticker := time.NewTicker(5 * time.Minute)
-		defer ticker.Stop()
-		for range ticker.C {
+		defer r.wg.Done()
+		cleanRateLimitBuckets(r.ctx, &mu, buckets)
+	}()
+	return func(handler middleware.Handler) middleware.Handler {
+		return func(ctx context.Context, req any) (any, error) {
+			key := prefix + clientIP(ctx)
 			mu.Lock()
-			for k, e := range buckets {
-				if time.Since(e.lastSeen) > 10*time.Minute {
-					delete(buckets, k)
+			entry, ok := buckets[key]
+			if !ok {
+				entry = &rateLimitEntry{limiter: rate.NewLimiter(limit, capacity)}
+				buckets[key] = entry
+			}
+			entry.lastSeen = time.Now()
+			allowed := entry.limiter.Allow()
+			mu.Unlock()
+			if !allowed {
+				return nil, kerrors.New(http.StatusTooManyRequests, rateLimitReason, "请求过于频繁，请稍后再试")
+			}
+			return handler(ctx, req)
+		}
+	}
+}
+
+func cleanRateLimitBuckets(ctx context.Context, mu *sync.Mutex, buckets map[string]*rateLimitEntry) {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			mu.Lock()
+			for key, entry := range buckets {
+				if time.Since(entry.lastSeen) > 10*time.Minute {
+					delete(buckets, key)
 				}
 			}
 			mu.Unlock()
 		}
-	}()
-
-	return func(c *gin.Context) {
-		key := keyFunc(c)
-		mu.Lock()
-		e, ok := buckets[key]
-		if !ok {
-			e = &entry{limiter: rate.NewLimiter(r, b)}
-			buckets[key] = e
-		}
-		e.lastSeen = time.Now()
-		lim := e.limiter
-		mu.Unlock()
-
-		if !lim.Allow() {
-			httputil.Fail(c, 429, "请求过于频繁，请稍后再试")
-			c.Abort()
-			return
-		}
-		c.Next()
 	}
+}
+
+func clientIP(ctx context.Context) string {
+	if request, ok := khttp.RequestFromServerContext(ctx); ok {
+		return hostOnly(request.RemoteAddr)
+	}
+	if p, ok := peer.FromContext(ctx); ok && p.Addr != nil {
+		return hostOnly(p.Addr.String())
+	}
+	return ""
+}
+
+func hostOnly(address string) string {
+	host, _, err := net.SplitHostPort(address)
+	if err == nil {
+		return host
+	}
+	return address
 }

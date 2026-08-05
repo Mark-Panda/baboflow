@@ -1,3 +1,5 @@
+import type { ProtoInt64 } from '@/api/http';
+
 // WebSocket 消息类型（agent-chat / chain-debug 双 channel）
 
 export type WsChannel = 'agent-chat' | 'chain-debug';
@@ -10,7 +12,7 @@ export interface WsSubscribe {
   sessionId?: string;
   agentKey?: string;
   content?: string;
-  assetIds?: number[];
+  assetIds?: ProtoInt64[];
   // 当前画布规则链 DSL（仅 agent-chain-builder 增量编辑时携带）
   chainDsl?: string;
   // chain-debug

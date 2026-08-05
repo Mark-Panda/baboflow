@@ -2,74 +2,20 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/time/rate"
 
 	"baboflow/internal/biz"
 	"baboflow/internal/data/po"
 )
 
 func init() { gin.SetMode(gin.TestMode) }
-
-// ---- httputil 信封（经 service 间接覆盖）----
-// 直接断言见 internal/server/httputil；这里覆盖中间件对信封/状态码的使用。
-
-// ---- RateLimitMiddleware ----
-
-func TestRateLimitMiddleware(t *testing.T) {
-	// 容量 2、每秒补 1：前 2 个通过，第 3 个被限流。
-	rl := RateLimitMiddleware(func(c *gin.Context) string { return "k" }, rate.Every(time.Second), 2)
-
-	newReq := func() *httptest.ResponseRecorder {
-		w := httptest.NewRecorder()
-		c, _ := gin.CreateTestContext(w)
-		c.Request = httptest.NewRequest(http.MethodGet, "/x", nil)
-		rl(c)
-		return w
-	}
-
-	if w := newReq(); w.Code != http.StatusOK {
-		t.Fatalf("req1 should pass, got %d", w.Code)
-	}
-	if w := newReq(); w.Code != http.StatusOK {
-		t.Fatalf("req2 should pass, got %d", w.Code)
-	}
-	w3 := newReq()
-	if w3.Code != http.StatusTooManyRequests {
-		t.Fatalf("req3 should be 429, got %d", w3.Code)
-	}
-	if body := w3.Body.String(); !strings.Contains(body, "429") {
-		t.Fatalf("429 body should carry code 429, got %s", body)
-	}
-}
-
-func TestRateLimitMiddleware_PerKeyIsolation(t *testing.T) {
-	rl := RateLimitMiddleware(func(c *gin.Context) string { return c.Query("k") }, rate.Every(time.Minute), 1)
-	mk := func(key string) *httptest.ResponseRecorder {
-		w := httptest.NewRecorder()
-		c, _ := gin.CreateTestContext(w)
-		c.Request = httptest.NewRequest(http.MethodGet, "/x?k="+key, nil)
-		rl(c)
-		return w
-	}
-	// keyA 用掉额度后，keyB 仍应通过（互不影响）。
-	if w := mk("a"); w.Code != http.StatusOK {
-		t.Fatalf("a1 should pass")
-	}
-	if w := mk("a"); w.Code != http.StatusTooManyRequests {
-		t.Fatalf("a2 should be limited")
-	}
-	if w := mk("b"); w.Code != http.StatusOK {
-		t.Fatalf("b1 should pass (isolated key)")
-	}
-}
 
 // ---- MCPAuthMiddleware ----
 
@@ -80,7 +26,12 @@ type stubAuthRepo struct {
 }
 
 func (s *stubAuthRepo) FindUserByUsername(ctx context.Context, u string) (*po.AdminUser, error) {
-	return nil, errors.New("not implemented")
+	for _, user := range s.users {
+		if user.Username == u {
+			return user, nil
+		}
+	}
+	return nil, errors.New("user not found")
 }
 func (s *stubAuthRepo) FindUserByFeishuOpenID(ctx context.Context, openid string) (*po.AdminUser, error) {
 	return nil, errors.New("not implemented")
@@ -121,10 +72,26 @@ func (s *stubAuthRepo) DeleteOtherSessions(ctx context.Context, userID int64, ke
 func newMCPTestServer(token string, repo biz.AuthRepo) *gin.Engine {
 	r := gin.New()
 	authUC := biz.NewAuthUsecase(repo)
-	r.GET("/mcp/sse", MCPAuthMiddleware(authUC, token), func(c *gin.Context) {
-		c.String(http.StatusOK, "sse-ok")
+	r.POST("/mcp/message", MCPAuthMiddleware(authUC, token), func(c *gin.Context) {
+		c.String(http.StatusOK, "message-ok")
 	})
 	return r
+}
+
+func TestGinErrorIncludesFrontendMessageContract(t *testing.T) {
+	r := gin.New()
+	r.GET("/", func(c *gin.Context) {
+		ginError(c, http.StatusBadRequest, "请求错误")
+	})
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/", nil))
+	var body map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["message"] != "请求错误" {
+		t.Fatalf("message = %q, want %q; body=%s", body["message"], "请求错误", w.Body.String())
+	}
 }
 
 func TestMCPAuth_NoCredentials_Rejected(t *testing.T) {
@@ -132,7 +99,7 @@ func TestMCPAuth_NoCredentials_Rejected(t *testing.T) {
 	r := newMCPTestServer("secret-token", repo)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/mcp/sse", nil)
+	req := httptest.NewRequest(http.MethodPost, "/mcp/message", nil)
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("expect 401 without credentials, got %d (%s)", w.Code, w.Body.String())
@@ -144,10 +111,10 @@ func TestMCPAuth_ValidBearerToken_Allowed(t *testing.T) {
 	r := newMCPTestServer("secret-token", repo)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/mcp/sse", nil)
+	req := httptest.NewRequest(http.MethodPost, "/mcp/message", nil)
 	req.Header.Set("Authorization", "Bearer secret-token")
 	r.ServeHTTP(w, req)
-	if w.Code != http.StatusOK || w.Body.String() != "sse-ok" {
+	if w.Code != http.StatusOK || w.Body.String() != "message-ok" {
 		t.Fatalf("expect 200 with valid token, got %d (%s)", w.Code, w.Body.String())
 	}
 }
@@ -157,7 +124,7 @@ func TestMCPAuth_WrongBearerToken_Rejected(t *testing.T) {
 	r := newMCPTestServer("secret-token", repo)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/mcp/sse", nil)
+	req := httptest.NewRequest(http.MethodPost, "/mcp/message", nil)
 	req.Header.Set("Authorization", "Bearer wrong")
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusUnauthorized {
@@ -175,7 +142,7 @@ func TestMCPAuth_ValidSessionCookie_Allowed(t *testing.T) {
 	r := newMCPTestServer("", repo) // 无 token：仅会话可用
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/mcp/sse", nil)
+	req := httptest.NewRequest(http.MethodPost, "/mcp/message", nil)
 	req.AddCookie(&http.Cookie{Name: biz.SessionCookieName, Value: "sid-1"})
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -193,7 +160,7 @@ func TestMCPAuth_ExpiredSessionCookie_Rejected(t *testing.T) {
 	r := newMCPTestServer("", repo)
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/mcp/sse", nil)
+	req := httptest.NewRequest(http.MethodPost, "/mcp/message", nil)
 	req.AddCookie(&http.Cookie{Name: biz.SessionCookieName, Value: "sid-old"})
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusUnauthorized {

@@ -1,8 +1,8 @@
-import http, { Page } from './http';
+import http, { Page, ProtoInt64, toPageQuery } from './http';
 import { NodeTrace } from './chain';
 
 export interface ChainRun {
-  id: number;
+  id: ProtoInt64;
   chainId: string;
   trigger: string;
   status: string;
@@ -16,6 +16,6 @@ export interface ChainRun {
 
 export const runApi = {
   list: (params: { chainId?: string; status?: string; page?: number; pageSize?: number }) =>
-    http.get<unknown, Page<ChainRun>>('/chains/runs', { params }),
-  detail: (runId: number) => http.get<unknown, ChainRun>(`/chains/runs/${runId}`),
+    http.get<unknown, Page<ChainRun>>('/rule-chain-runs', { params: toPageQuery(params) }),
+  detail: (runId: ProtoInt64) => http.get<unknown, ChainRun>(`/rule-chain-runs/${runId}`),
 };

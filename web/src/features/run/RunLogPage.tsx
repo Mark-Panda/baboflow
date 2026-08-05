@@ -9,6 +9,7 @@ import { ReactFlow, Background, Controls, ReactFlowProvider, MarkerType } from '
 
 import { runApi, ChainRun } from '@/api/run';
 import { chainApi, ChainListItem, TraceMessage } from '@/api/chain';
+import { toSafeNumber } from '@/api/http';
 import { componentApi } from '@/api/component';
 import StatusTag from '@/components/StatusTag';
 import { dslToFlow, EDGE_TYPE, DslChain } from '../chain/canvas/chainDsl';
@@ -49,7 +50,7 @@ export default function RunLogPage() {
     try {
       const res = await runApi.list({ chainId, status, page, pageSize });
       setData(res.list || []);
-      setTotal(res.total || 0);
+      setTotal(res.page ? toSafeNumber(res.page.total, 'rule chain run total') : 0);
     } catch {
       message.error('加载运行日志失败');
     } finally {

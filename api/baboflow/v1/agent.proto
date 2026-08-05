@@ -1,0 +1,26 @@
+syntax = "proto3";
+package baboflow.v1;
+import "google/api/annotations.proto";
+import "google/protobuf/wrappers.proto";
+option go_package = "baboflow/api/baboflow/v1;v1";
+message Agent { int64 id = 1; string key = 2; string name = 3; string instruction = 4; google.protobuf.Int64Value llmModelId = 5; repeated int64 skillIds = 6; repeated int64 mcpIds = 7; repeated string builtinTools = 8; repeated int64 subAgentIds = 9; bool isBuiltin = 10; google.protobuf.BoolValue enabled = 11; string updatedAt = 12; } message AgentInput { string key = 1; string name = 2; string instruction = 3; google.protobuf.Int64Value llmModelId = 4; repeated int64 skillIds = 5; repeated int64 mcpIds = 6; repeated string builtinTools = 7; repeated int64 subAgentIds = 8; google.protobuf.BoolValue enabled = 9; } message AgentUpdateRequest { string key = 1; string name = 2; string instruction = 3; google.protobuf.Int64Value llmModelId = 4; repeated int64 skillIds = 5; repeated int64 mcpIds = 6; repeated string builtinTools = 7; repeated int64 subAgentIds = 8; google.protobuf.BoolValue enabled = 9; } message AgentKeyRequest { string key = 1; } message AgentListRequest { string keyword = 1; } message AgentListResponse { repeated Agent list = 1; } message AgentSession { string id = 1; string agentKey = 2; string chainId = 3; string title = 4; string createdAt = 5; string updatedAt = 6; } message AgentSessionListRequest { string agentKey = 1; } message CreateAgentSessionRequest { string agentKey = 1; string title = 2; google.protobuf.StringValue chainId = 3; } message AgentSessionRequest { string sessionId = 1; } message AgentSessionList { repeated AgentSession list = 1; } message AgentQuestion { string question = 1; repeated string options = 2; bool multiple = 3; bool allowOther = 4; } message AgentToolCall { string name = 1; string input = 2; string output = 3; string status = 4; string questionId = 5; AgentQuestion question = 6; } message AttachmentRef { int64 assetId = 1; string name = 2; string mime = 3; } message AgentMessage { int64 id = 1; string sessionId = 2; string role = 3; string content = 4; repeated AgentToolCall toolCalls = 5; repeated AttachmentRef attachment = 6; string subAgent = 7; string createdAt = 8; } message AgentMessageList { repeated AgentMessage list = 1; } message AgentOk { bool ok = 1; }
+service AgentService {
+  // Old: GET /api/v1/agents?keyword=.
+  rpc List(AgentListRequest) returns (AgentListResponse) { option (google.api.http) = { get: "/api/v1/agents" }; }
+  // Old: POST /api/v1/agents.
+  rpc Create(AgentInput) returns (Agent) { option (google.api.http) = { post: "/api/v1/agents" body: "*" }; }
+  // Old: GET /api/v1/agents/{key}.
+  rpc Get(AgentKeyRequest) returns (Agent) { option (google.api.http) = { get: "/api/v1/agents/{key}" }; }
+  // Old: PUT /api/v1/agents/{key}.
+  rpc Update(AgentUpdateRequest) returns (AgentOk) { option (google.api.http) = { put: "/api/v1/agents/{key}" body: "*" }; }
+  // Old: DELETE /api/v1/agents/{key}.
+  rpc Delete(AgentKeyRequest) returns (AgentOk) { option (google.api.http) = { delete: "/api/v1/agents/{key}" }; }
+  // Old: GET /api/v1/agents/{key}/sessions.
+  rpc ListSessions(AgentSessionListRequest) returns (AgentSessionList) { option (google.api.http) = { get: "/api/v1/agent-sessions" }; }
+  // Old: POST /api/v1/agents/{key}/sessions.
+  rpc CreateSession(CreateAgentSessionRequest) returns (AgentSession) { option (google.api.http) = { post: "/api/v1/agent-sessions" body: "*" }; }
+  // Old: DELETE /api/v1/agents/sessions/{sessionId}.
+  rpc DeleteSession(AgentSessionRequest) returns (AgentOk) { option (google.api.http) = { delete: "/api/v1/agent-sessions/{sessionId}" }; }
+  // Old: GET /api/v1/agents/sessions/{sessionId}/messages.
+  rpc ListMessages(AgentSessionRequest) returns (AgentMessageList) { option (google.api.http) = { get: "/api/v1/agent-sessions/{sessionId}/messages" }; }
+}

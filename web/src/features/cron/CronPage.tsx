@@ -12,6 +12,7 @@ import dayjs, { Dayjs } from 'dayjs';
 import { cronApi, CronJob, CronInput } from '@/api/cron';
 import { chainApi, ChainListItem } from '@/api/chain';
 import { listAgents, Agent } from '@/api/agent';
+import { toSafeNumber } from '@/api/http';
 
 type FormValues = {
   name?: string;
@@ -93,7 +94,7 @@ export default function CronPage() {
       targetId: r.targetId,
       scheduleType: r.scheduleType,
       cronExpr: r.cronExpr,
-      intervalSec: r.intervalSec,
+      intervalSec: toSafeNumber(r.intervalSec, 'cron intervalSec'),
       runAt: r.runAt ? dayjs(r.runAt) : undefined,
       payloadText: r.payload ? JSON.stringify(r.payload) : '',
     });
@@ -117,7 +118,7 @@ export default function CronPage() {
       targetId: v.targetId,
       scheduleType: v.scheduleType,
       cronExpr: v.cronExpr,
-      intervalSec: v.intervalSec,
+      intervalSec: v.intervalSec === undefined ? undefined : String(v.intervalSec),
       runAt: v.runAt ? v.runAt.toISOString() : undefined,
       payload,
     };

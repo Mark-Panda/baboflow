@@ -1,0 +1,32 @@
+syntax = "proto3";
+package baboflow.v1;
+import "google/api/annotations.proto";
+import "baboflow/v1/common.proto";
+option go_package = "baboflow/api/baboflow/v1;v1";
+
+message ArcheryConnection { int64 id = 1; string name = 2; string endpoint = 3; string username = 4; string password = 5; bool insecure = 6; string caCert = 7; string remark = 8; int32 instanceCount = 9; bool isDefault = 10; string createdAt = 11; string updatedAt = 12; }
+message ArcheryConnectionInput { string name = 1; string endpoint = 2; string username = 3; string password = 4; bool insecure = 5; string caCert = 6; string remark = 7; }
+message ArcheryConnectionRequest { int64 id = 1; string name = 2; string endpoint = 3; string username = 4; string password = 5; bool insecure = 6; string caCert = 7; string remark = 8; } message ArcheryIdRequest { int64 id = 1; }
+message ArcheryInstance { int64 id = 1; int64 connectionId = 2; string instanceName = 3; string dbType = 4; } message ArcheryConnectionList { repeated ArcheryConnection list = 1; } message ArcheryInstanceList { repeated ArcheryInstance list = 1; } message ArcheryTestResult { bool ok = 1; int32 instances = 2; string error = 3; } message ArcheryCreateResponse { int64 id = 1; } message ArcheryOkResponse { bool ok = 1; }
+service ArcheryService {
+  // Old: GET /api/v1/archery/connections.
+  rpc ListConnections(Empty) returns (ArcheryConnectionList) { option (google.api.http) = { get: "/api/v1/archery/connections" }; }
+  // Old: POST /api/v1/archery/connections.
+  rpc CreateConnection(ArcheryConnectionInput) returns (ArcheryCreateResponse) { option (google.api.http) = { post: "/api/v1/archery/connections" body: "*" }; }
+  // Old: GET /api/v1/archery/connections/{id}.
+  rpc GetConnection(ArcheryIdRequest) returns (ArcheryConnection) { option (google.api.http) = { get: "/api/v1/archery/connections/{id}" }; }
+  // Old: PUT /api/v1/archery/connections/{id}.
+  rpc UpdateConnection(ArcheryConnectionRequest) returns (ArcheryOkResponse) { option (google.api.http) = { put: "/api/v1/archery/connections/{id}" body: "*" }; }
+  // Old: DELETE /api/v1/archery/connections/{id}.
+  rpc DeleteConnection(ArcheryIdRequest) returns (ArcheryOkResponse) { option (google.api.http) = { delete: "/api/v1/archery/connections/{id}" }; }
+  // Old: POST /api/v1/archery/connections/{id}/default.
+  rpc SetDefaultConnection(ArcheryIdRequest) returns (ArcheryOkResponse) { option (google.api.http) = { post: "/api/v1/archery/connections/{id}/default" body: "*" }; }
+  // Old: DELETE /api/v1/archery/connections/{id}/default.
+  rpc ClearDefaultConnection(ArcheryIdRequest) returns (ArcheryOkResponse) { option (google.api.http) = { delete: "/api/v1/archery/connections/{id}/default" }; }
+  // Old: POST /api/v1/archery/connections/{id}/test.
+  rpc TestConnection(ArcheryIdRequest) returns (ArcheryTestResult) { option (google.api.http) = { post: "/api/v1/archery/connections/{id}/test" body: "*" }; }
+  // Old: GET /api/v1/archery/connections/{id}/instances.
+  rpc ListInstances(ArcheryIdRequest) returns (ArcheryInstanceList) { option (google.api.http) = { get: "/api/v1/archery/connections/{id}/instances" }; }
+  // Old: POST /api/v1/archery/connections/{id}/sync-instances.
+  rpc SyncInstances(ArcheryIdRequest) returns (ArcheryInstanceList) { option (google.api.http) = { post: "/api/v1/archery/connections/{id}/sync-instances" body: "*" }; }
+}

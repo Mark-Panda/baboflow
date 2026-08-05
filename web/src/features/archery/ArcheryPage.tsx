@@ -11,15 +11,16 @@ import type { ColumnsType } from 'antd/es/table';
 import {
   archeryApi, ArcheryConnection, ArcheryConnectionInput, ArcheryInstance,
 } from '@/api/archery';
+import type { ProtoInt64 } from '@/api/http';
 
 export default function ArcheryPage() {
   const { message } = App.useApp();
   const [list, setList] = useState<ArcheryConnection[]>([]);
   const [loading, setLoading] = useState(false);
-  const [testingId, setTestingId] = useState<number | null>(null);
-  const [syncingId, setSyncingId] = useState<number | null>(null);
+  const [testingId, setTestingId] = useState<ProtoInt64 | null>(null);
+  const [syncingId, setSyncingId] = useState<ProtoInt64 | null>(null);
   // 各连接已同步实例（展开行内展示）。
-  const [instances, setInstances] = useState<Record<number, ArcheryInstance[]>>({});
+  const [instances, setInstances] = useState<Record<ProtoInt64, ArcheryInstance[]>>({});
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<ArcheryConnection | null>(null);

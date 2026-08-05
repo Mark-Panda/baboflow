@@ -1,0 +1,40 @@
+syntax = "proto3";
+package baboflow.v1;
+import "google/api/annotations.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/wrappers.proto";
+import "baboflow/v1/common.proto";
+option go_package = "baboflow/api/baboflow/v1;v1";
+
+message Provider { int64 id = 1; string name = 2; string provider = 3; string baseUrl = 4; string apiKeyMasked = 5; google.protobuf.Struct extra = 6; string remark = 7; int32 modelCount = 8; }
+message ProviderInput { string name = 1; string provider = 2; string baseUrl = 3; string apiKey = 4; google.protobuf.Struct extra = 5; string remark = 6; }
+message LLMModel { int64 id = 1; int64 providerId = 2; string model = 3; string alias = 4; double temperature = 5; int32 maxTokens = 6; bool isDefault = 7; google.protobuf.Struct capability = 8; google.protobuf.BoolValue enabled = 9; }
+message ModelInput { string model = 1; string alias = 2; double temperature = 3; int32 maxTokens = 4; google.protobuf.BoolValue isDefault = 5; google.protobuf.Struct capability = 6; google.protobuf.BoolValue enabled = 7; }
+message IdRequest { int64 id = 1; } message ProviderModelsRequest { int64 providerId = 1; } message ModelIdRequest { int64 modelId = 1; }
+message UpdateProviderRequest { int64 id = 1; string name = 2; string provider = 3; string baseUrl = 4; string apiKey = 5; google.protobuf.Struct extra = 6; string remark = 7; } message UpdateModelRequest { int64 modelId = 1; string model = 2; string alias = 3; double temperature = 4; int32 maxTokens = 5; google.protobuf.BoolValue isDefault = 6; google.protobuf.Struct capability = 7; google.protobuf.BoolValue enabled = 8; } message CreateModelsRequest { int64 providerId = 1; repeated ModelInput models = 2; } message ProviderList { repeated Provider list = 1; } message ModelList { repeated LLMModel list = 1; } message StringList { repeated string models = 1; } message TestResult { bool ok = 1; int64 latencyMs = 2; string message = 3; } message CreateIdResponse { int64 id = 1; } message OkResponse { bool ok = 1; }
+service LLMService {
+  // Old: GET /api/v1/llm/providers.
+  rpc ListProviders(Empty) returns (ProviderList) { option (google.api.http) = { get: "/api/v1/llm/providers" }; }
+  // Old: POST /api/v1/llm/providers.
+  rpc CreateProvider(ProviderInput) returns (CreateIdResponse) { option (google.api.http) = { post: "/api/v1/llm/providers" body: "*" }; }
+  // Old: PUT /api/v1/llm/providers/{id}.
+  rpc UpdateProvider(UpdateProviderRequest) returns (OkResponse) { option (google.api.http) = { put: "/api/v1/llm/providers/{id}" body: "*" }; }
+  // Old: DELETE /api/v1/llm/providers/{id}.
+  rpc DeleteProvider(IdRequest) returns (OkResponse) { option (google.api.http) = { delete: "/api/v1/llm/providers/{id}" }; }
+  // Old: POST /api/v1/llm/providers/{id}/test.
+  rpc TestProvider(IdRequest) returns (TestResult) { option (google.api.http) = { post: "/api/v1/llm/providers/{id}/test" body: "*" }; }
+  // Old: GET /api/v1/llm/providers/{id}/models/remote.
+  rpc ListRemoteModels(IdRequest) returns (StringList) { option (google.api.http) = { get: "/api/v1/llm/providers/{id}/models/remote" }; }
+  // Old: GET /api/v1/llm/providers/{id}/models.
+  rpc ListModels(ProviderModelsRequest) returns (ModelList) { option (google.api.http) = { get: "/api/v1/llm/providers/{providerId}/models" }; }
+  // Old: POST /api/v1/llm/providers/{id}/models.
+  rpc CreateModels(CreateModelsRequest) returns (OkResponse) { option (google.api.http) = { post: "/api/v1/llm/providers/{providerId}/models" body: "*" }; }
+  // Old: PUT /api/v1/llm/models/{modelId}.
+  rpc UpdateModel(UpdateModelRequest) returns (OkResponse) { option (google.api.http) = { put: "/api/v1/llm/models/{modelId}" body: "*" }; }
+  // Old: DELETE /api/v1/llm/models/{modelId}.
+  rpc DeleteModel(ModelIdRequest) returns (OkResponse) { option (google.api.http) = { delete: "/api/v1/llm/models/{modelId}" }; }
+  // Old: POST /api/v1/llm/models/{modelId}/default.
+  rpc SetDefaultModel(ModelIdRequest) returns (OkResponse) { option (google.api.http) = { post: "/api/v1/llm/models/{modelId}/default" body: "*" }; }
+  // Old: POST /api/v1/llm/models/{modelId}/test.
+  rpc TestModel(ModelIdRequest) returns (TestResult) { option (google.api.http) = { post: "/api/v1/llm/models/{modelId}/test" body: "*" }; }
+}

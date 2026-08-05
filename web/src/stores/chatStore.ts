@@ -2,10 +2,11 @@ import { create } from 'zustand';
 import { wsClient } from '@/ws/client';
 import type { WsFrame } from '@/ws/types';
 import * as api from '@/api/agent';
+import type { ProtoInt64 } from '@/api/http';
 
 // 一条聊天消息（含流式中的临时消息）
 export interface ChatMsg {
-  id: number | string; // 流式中临时用 string
+  id: ProtoInt64 | string; // 流式中临时用 string
   role: 'user' | 'assistant';
   content: string;
   toolCalls?: api.ToolCallRec[];
@@ -25,7 +26,7 @@ interface ChatState {
   subscribed: boolean;
 
   openSession: (sessionId: string) => Promise<void>;
-  send: (agentKey: string, content: string, assetIds?: number[]) => void;
+  send: (agentKey: string, content: string, assetIds?: ProtoInt64[]) => void;
   answerQuestion: (questionId: string, answer: string) => void;
   reset: () => void;
 }

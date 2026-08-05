@@ -128,7 +128,7 @@ func LoadWithFile(path string) *Config {
 	}
 	return &Config{
 		HTTPAddr: pick("HTTP_ADDR", fc.HTTPAddr, ":8000"),
-		GRPCAddr: pick("GRPC_ADDR", fc.GRPCAddr, ":9000"),
+		GRPCAddr: pick("GRPC_ADDR", fc.GRPCAddr, "127.0.0.1:9000"),
 
 		DatabaseDSN: pick("DATABASE_DSN", fc.DatabaseDSN, "host=127.0.0.1 user=babo password=babo dbname=baboflow port=5432 sslmode=disable"),
 
