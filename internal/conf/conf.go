@@ -25,10 +25,6 @@ type Config struct {
 
 	Secret string // BABO_SECRET: 32 字节，用于 apiKey AES-GCM 加密
 
-	LangfuseHost      string
-	LangfusePublicKey string
-	LangfuseSecretKey string
-
 	MemoryEnabled        bool // MEMORY_ENABLED: 是否启用 Agent 长期记忆
 	MemorySessionSummary bool // MEMORY_SESSION_SUMMARY: 是否启用会话摘要
 	MemoryEventSearch    bool // MEMORY_EVENT_SEARCH: 是否启用事件检索
@@ -62,10 +58,6 @@ type fileConfig struct {
 	DatabaseDSN string `yaml:"databaseDsn"`
 
 	Secret string `yaml:"secret"`
-
-	LangfuseHost      string `yaml:"langfuseHost"`
-	LangfusePublicKey string `yaml:"langfusePublicKey"`
-	LangfuseSecretKey string `yaml:"langfuseSecretKey"`
 
 	MemoryEnabled        *bool `yaml:"memoryEnabled"`
 	MemorySessionSummary *bool `yaml:"memorySessionSummary"`
@@ -133,10 +125,6 @@ func LoadWithFile(path string) *Config {
 		DatabaseDSN: pick("DATABASE_DSN", fc.DatabaseDSN, "host=127.0.0.1 user=babo password=babo dbname=baboflow port=5432 sslmode=disable"),
 
 		Secret: pick("BABO_SECRET", fc.Secret, "baboflow-dev-secret-32bytes-pad!"),
-
-		LangfuseHost:      pick("LANGFUSE_HOST", fc.LangfuseHost, ""),
-		LangfusePublicKey: pick("LANGFUSE_PUBLIC_KEY", fc.LangfusePublicKey, ""),
-		LangfuseSecretKey: pick("LANGFUSE_SECRET_KEY", fc.LangfuseSecretKey, ""),
 
 		MemoryEnabled:        pickBoolPtr("MEMORY_ENABLED", fc.MemoryEnabled, true),
 		MemorySessionSummary: pickBoolPtr("MEMORY_SESSION_SUMMARY", fc.MemorySessionSummary, false),

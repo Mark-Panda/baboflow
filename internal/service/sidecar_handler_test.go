@@ -49,7 +49,7 @@ func (sidecarAssetStore) DeleteBySession(string) error                { return n
 
 func TestAgentAssetSidecarUploadReturnsProtoInt64Strings(t *testing.T) {
 	repo := sidecarAgentRepo{userID: 7}
-	uc := biz.NewAgentUsecase(repo, nil, nil, sidecarAssetStore{}, nil)
+	uc := biz.NewAgentUsecase(repo, nil, nil, sidecarAssetStore{})
 	handler := NewAgentHandler(uc)
 	router := gin.New()
 	router.POST("/api/v1/agent-assets", GinAuthMiddleware(testAuthUsecase()), handler.UploadAsset)
@@ -92,7 +92,7 @@ func TestAgentAssetSidecarUploadReturnsProtoInt64Strings(t *testing.T) {
 
 func TestAgentAssetSidecarReturnsRawContentAfterAuthentication(t *testing.T) {
 	repo := sidecarAgentRepo{userID: 7}
-	uc := biz.NewAgentUsecase(repo, nil, nil, sidecarAssetStore{data: []byte("asset-body")}, nil)
+	uc := biz.NewAgentUsecase(repo, nil, nil, sidecarAssetStore{data: []byte("asset-body")})
 	handler := NewAgentHandler(uc)
 	router := gin.New()
 	router.GET("/api/v1/agent-assets/:assetId", GinAuthMiddleware(testAuthUsecase()), handler.GetAsset)

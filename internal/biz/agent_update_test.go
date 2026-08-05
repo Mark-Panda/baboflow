@@ -60,7 +60,7 @@ func (r *fakeAgentRepo) SetSubAgents(_ context.Context, _ int64, childIDs []int6
 }
 
 func newTestAgentUsecase(repo AgentDataRepo) *AgentUsecase {
-	return NewAgentUsecase(repo, agentkit.NewManager(nil, nil, nil, nil, nil), nil, nil, nil)
+	return NewAgentUsecase(repo, agentkit.NewManager(nil, nil, nil, nil, nil), nil, nil)
 }
 
 func TestDeleteSessionKeepsBusinessDataWhenMemoryCleanupFails(t *testing.T) {

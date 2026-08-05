@@ -132,7 +132,7 @@ func (b *BuiltinTools) bashTool(sessionID string) (tool.InvokableTool, error) {
 
 // envDenyPrefixes 是不会传给 bash 子进程的环境变量前缀（含密钥/连接串等）。
 var envDenyPrefixes = []string{
-	"BABO_SECRET", "DATABASE_DSN", "LANGFUSE_SECRET", "LANGFUSE_PUBLIC",
+	"BABO_SECRET", "DATABASE_DSN",
 	"ADMIN_INIT_PASSWORD", "API_KEY", "SECRET", "PASSWORD", "TOKEN",
 }
 

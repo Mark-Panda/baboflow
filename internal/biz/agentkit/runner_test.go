@@ -94,7 +94,7 @@ func TestRunAggregatesTextAndTools(t *testing.T) {
 		streamed = append(streamed, ev.Type)
 	}}
 
-	res, err := Run(context.Background(), ag, nil, &Input{Text: "hi"}, cb, nil, "1", "sess")
+	res, err := Run(context.Background(), ag, nil, &Input{Text: "hi"}, cb, "1", "sess")
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestRunStopsAfterAskUser(t *testing.T) {
 	var streamed []string
 	res, err := Run(context.Background(), ag, nil, &Input{Text: "生成规则链"}, &RunCallbacks{
 		OnEvent: func(ev *StreamEvent) { streamed = append(streamed, ev.Type) },
-	}, nil, "1", "sess")
+	}, "1", "sess")
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
@@ -159,7 +159,7 @@ func TestRunPropagatesError(t *testing.T) {
 			gotErr = true
 		}
 	}}
-	_, err := Run(context.Background(), errAgent, nil, &Input{Text: "x"}, cb, nil, "1", "s")
+	_, err := Run(context.Background(), errAgent, nil, &Input{Text: "x"}, cb, "1", "s")
 	if err == nil {
 		t.Fatal("expect error")
 	}

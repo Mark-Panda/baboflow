@@ -1,6 +1,6 @@
 # 部署（Docker / docker-compose）
 
-一键拉起 **pgvector(db) + langfuse + baboflow**。服务内部 HTTP 默认监听 `:8000`；当前 `docker-compose.yml` 将它映射到宿主机 `http://localhost:8001`。
+一键拉起 **pgvector(db) + baboflow**。服务内部 HTTP 默认监听 `:8000`；当前 `docker-compose.yml` 将它映射到宿主机 `http://localhost:8001`。
 
 ## 快速开始
 
@@ -18,8 +18,7 @@ docker compose up -d --build
 
 | 服务 | 镜像 | 端口 | 说明 |
 |------|------|------|------|
-| db | pgvector/pgvector:pg16 | 宿主 5433 → 容器 5432 | PostgreSQL + vector；`docker/db-init` 首次自动建 `langfuse` 库 |
-| langfuse | langfuse/langfuse:2 | 3001 | LLM 观测（可选）；Web 在容器 3000 |
+| db | pgvector/pgvector:pg16 | 宿主 5433 → 容器 5432 | PostgreSQL + vector |
 | baboflow | 本地 build | 8000 | HTTP/WS/静态托管/MCP SSE |
 | baboflow gRPC | 同 baboflow 进程 | `127.0.0.1:9000` | proto gRPC；默认不发布宿主机端口 |
 
@@ -32,7 +31,6 @@ docker compose up -d --build
 - `BABO_SECRET` — apiKey AES-GCM 密钥（32 字节，**生产务必改**）
 - `ADMIN_INIT_PASSWORD` — admin 初始密码
 - `MCP_AUTH_TOKEN` — `/mcp` SSE 端点的 Bearer 令牌（外部 MCP 客户端无 Cookie 时用它鉴权；留空则仅接受已登录会话）。**该端点会执行已发布规则链，已默认鉴权**；对外提供 MCP 服务时请设强随机令牌。
-- `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` — 在 Langfuse Web 建项目后填入，留空则关闭上报
 - `HTTP_ADDR` — HTTP 监听地址，默认 `:8000`。
 - `GRPC_ADDR` — gRPC 监听地址，默认 `127.0.0.1:9000`。仅在受控反向代理或专用网络需要时覆盖；不要直接暴露到公网，须保持防火墙/网络策略隔离。
 

@@ -50,11 +50,7 @@ func wireApp(c *conf.Config) (*App, func(), error) {
 	builtinTools := agentkit.ProvideBuiltinTools(c)
 	agentkitManager := agentkit.NewManager(agentRepo, skillRepo, llmResolver, modelFactory, builtinTools)
 	assetStore := data.NewAssetStore(c)
-	tracer, cleanup, err := agentkit.ProvideTracer(c)
-	if err != nil {
-		return nil, nil, err
-	}
-	agentUsecase := biz.NewAgentUsecase(agentDataRepo, agentkitManager, c, assetStore, tracer)
+	agentUsecase := biz.NewAgentUsecase(agentDataRepo, agentkitManager, c, assetStore)
 	agentProtoService := service.NewAgentProtoService(agentUsecase)
 	skillDataRepo := data.NewBizSkillDataRepo(db)
 	skillUsecase := biz.NewSkillUsecase(skillDataRepo, ruleChainUsecase, c)
@@ -80,8 +76,7 @@ func wireApp(c *conf.Config) (*App, func(), error) {
 	grpcServer := server.NewGRPCServer(c, authUsecase, authProtoService, archeryProtoService, llmProtoService, componentProtoService, ruleChainProtoService, agentProtoService, skillProtoService, mcpProtoService, boardProtoService, auditProtoService, cronProtoService, rateLimiters)
 	platformDeps := biz.NewPlatformDeps(componentRepo, ruleChainUsecase, skillUsecase)
 	platformTools := biz.NewPlatformTools(platformDeps)
-	app := newApp(httpServer, grpcServer, c, db, ruleChainUsecase, mcpUsecase, cronUsecase, boardUsecase, skillUsecase, archeryUsecase, auditUsecase, agentUsecase, agentkitManager, manager, componentSync, componentRepo, platformTools, tracer, rateLimiters, feishuHandler, skillHandler)
+	app := newApp(httpServer, grpcServer, c, db, ruleChainUsecase, mcpUsecase, cronUsecase, boardUsecase, skillUsecase, archeryUsecase, auditUsecase, agentUsecase, agentkitManager, manager, componentSync, componentRepo, platformTools, rateLimiters, feishuHandler, skillHandler)
 	return app, func() {
-		cleanup()
 	}, nil
 }

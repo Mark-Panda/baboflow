@@ -5,47 +5,9 @@ import (
 	"encoding/json"
 	"strings"
 
-	aggolangfuse "github.com/CoolBanHub/aggo/pkg/langfuse"
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/schema"
 )
-
-// Tracer 可选 Langfuse 追踪器：构造 per-run 回调 + trace 上下文。
-type Tracer struct {
-	handler *aggolangfuse.Handler
-}
-
-// NewTracer 用 conf 构造 Langfuse tracer；未配置返回 nil（不启用）。
-func NewTracer(host, publicKey, secretKey string) (*Tracer, func(), error) {
-	if host == "" || publicKey == "" || secretKey == "" {
-		return nil, func() {}, nil
-	}
-	h, cleanup, err := aggolangfuse.NewHandler(aggolangfuse.Config{
-		ClientConfig: aggolangfuse.ClientConfig{
-			Host:      host,
-			PublicKey: publicKey,
-			SecretKey: secretKey,
-		},
-		Name: "baboflow-agent",
-	})
-	if err != nil {
-		return nil, nil, err
-	}
-	return &Tracer{handler: h}, cleanup, nil
-}
-
-// runOptions 把 trace 上下文与回调组装成 AgentRunOption。
-func (t *Tracer) runOptions(ctx context.Context, userID, sessionID, name string) (context.Context, []adk.AgentRunOption) {
-	if t == nil || t.handler == nil {
-		return ctx, nil
-	}
-	ctx = aggolangfuse.SetTrace(ctx,
-		aggolangfuse.WithUserID(userID),
-		aggolangfuse.WithSessionID(sessionID),
-		aggolangfuse.WithName(name),
-	)
-	return ctx, []adk.AgentRunOption{adk.WithCallbacks(t.handler)}
-}
 
 // StreamEvent 一次 agent 运行中推给前端的事件（WS 帧）。
 type StreamEvent struct {
@@ -102,18 +64,17 @@ type ImageInput struct {
 
 // Run 执行 agent，逐事件回调并汇总结果。
 // history 为会话历史（不含本次输入），用于多轮对话。
-// tracer 可选：非 nil 时上报 Langfuse。
-func Run(ctx context.Context, ag adk.TypedAgent[*schema.AgenticMessage], history []*schema.AgenticMessage, in *Input, cb *RunCallbacks, tracer *Tracer, userID, sessionID string) (*RunResult, error) {
-	return run(ctx, ag, history, in, cb, tracer, userID, sessionID, true)
+func Run(ctx context.Context, ag adk.TypedAgent[*schema.AgenticMessage], history []*schema.AgenticMessage, in *Input, cb *RunCallbacks, userID, sessionID string) (*RunResult, error) {
+	return run(ctx, ag, history, in, cb, userID, sessionID, true)
 }
 
 // RunWithMemoryHistory 控制是否由记忆 Provider 注入会话历史。
 // 关闭时用于会话摘要模式，避免把已摘要的业务历史再次传入模型。
-func RunWithMemoryHistory(ctx context.Context, ag adk.TypedAgent[*schema.AgenticMessage], history []*schema.AgenticMessage, in *Input, cb *RunCallbacks, tracer *Tracer, userID, sessionID string, useMemoryHistory bool) (*RunResult, error) {
-	return run(ctx, ag, history, in, cb, tracer, userID, sessionID, useMemoryHistory)
+func RunWithMemoryHistory(ctx context.Context, ag adk.TypedAgent[*schema.AgenticMessage], history []*schema.AgenticMessage, in *Input, cb *RunCallbacks, userID, sessionID string, useMemoryHistory bool) (*RunResult, error) {
+	return run(ctx, ag, history, in, cb, userID, sessionID, useMemoryHistory)
 }
 
-func run(ctx context.Context, ag adk.TypedAgent[*schema.AgenticMessage], history []*schema.AgenticMessage, in *Input, cb *RunCallbacks, tracer *Tracer, userID, sessionID string, useMemoryHistory bool) (*RunResult, error) {
+func run(ctx context.Context, ag adk.TypedAgent[*schema.AgenticMessage], history []*schema.AgenticMessage, in *Input, cb *RunCallbacks, userID, sessionID string, useMemoryHistory bool) (*RunResult, error) {
 	runner := adk.NewTypedRunner(adk.TypedRunnerConfig[*schema.AgenticMessage]{Agent: ag})
 
 	msgs := make([]*schema.AgenticMessage, 0, len(history)+1)
@@ -129,11 +90,6 @@ func run(ctx context.Context, ag adk.TypedAgent[*schema.AgenticMessage], history
 		"businessHistory":  history,
 		"useMemoryHistory": useMemoryHistory,
 	}))
-	if tracer != nil {
-		var traceOpts []adk.AgentRunOption
-		ctx, traceOpts = tracer.runOptions(ctx, userID, sessionID, "agent-chat")
-		opts = append(opts, traceOpts...)
-	}
 
 	iter := runner.Run(ctx, msgs, opts...)
 	res := &RunResult{}

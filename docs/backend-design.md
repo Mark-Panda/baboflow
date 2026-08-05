@@ -194,7 +194,6 @@ CREATE TABLE agent_session (
   agent_id    BIGINT      NOT NULL REFERENCES agent(id) ON DELETE CASCADE,
   user_id     BIGINT      NULL,
   title       VARCHAR(255) NOT NULL DEFAULT '',    -- 会话标题(首条消息生成)
-  langfuse_trace_id VARCHAR(64) NOT NULL DEFAULT '', -- Langfuse trace 关联
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -373,14 +372,14 @@ baboflow/
 ├── cmd/baboflow/main.go        # wire 注入、HTTP+gRPC+WS server、启动跑 migration + 组件同步
 ├── configs/config.yaml         # Kratos 配置(读 .env)
 ├── internal/
-│   ├── conf/                   # config.proto: db, langfuse, mcp, rulego, secret
+│   ├── conf/                   # config: db, mcp, rulego, secret
 │   ├── server/                 # http.go / grpc.go / websocket.go
 │   ├── service/                # 薄层, DTO 转换, 调 biz
 │   ├── biz/                    # 领域逻辑 + repo 接口
 │   │   ├── auth.go llm.go rulechain.go component.go skill.go agent.go mcp.go board.go runlog.go cron.go asset.go
 │   │   ├── agentkit/           # aggo 封装(见 第四部分)
 │   │   │   ├── provider.go     # LLM 接入点→ChatModel(经 model→provider 取 baseUrl/解密 apiKey)
-│   │   │   ├── manager.go      # 构建/缓存 ChatModelAgent(ReAct), 注入 tools/skills/memory/langfuse/subAgent
+│   │   │   ├── manager.go      # 构建/缓存 ChatModelAgent(ReAct), 注入 tools/skills/memory/subAgent
 │   │   │   ├── builtin_tools.go# ★ 内置工具: bash / read / write / edit / grep
 │   │   │   └── tools.go        # search_component / rulechain_* / skill_* / mcp 工具
 │   │   ├── rulegokit/          # RuleGo 封装
@@ -606,7 +605,7 @@ Req 示例 `{ "targetType":"chain", "targetId":"chain_1", "scheduleType":"cron",
 
 ### L. 运维 / 审计
 **GET `/api/v1/audit?action=&userId=&page=&pageSize=`** — 审计日志查询（仅 admin）。`data.list[]:{id,userId,action,targetType,targetId,detail,ip,createdAt}`。
-**GET `/healthz` / `/readyz`** — 存活 / 就绪（db、langfuse 可达）。
+**GET `/healthz` / `/readyz`** — 存活 / 就绪（db 可达）。
 **GET `/metrics`** — Prometheus 指标（规则链执行、Agent token、MCP 延迟、WS 连接数）。
 
 ---
@@ -633,7 +632,7 @@ type=tool      payload:{name:"search_component", status:"end", result:{...}}
 type=subagent  payload:{agentKey:"agent-chain-builder", status:"start", task:"生成规则链DSL"}  # 委派给 subAgent
 type=subagent  payload:{agentKey:"agent-chain-builder", status:"end", summary:"已生成草稿"}     # subAgent 完成
 type=delta     payload:{text:"已生成规则链, 是否发布?"}
-type=done      payload:{messageId:9, tokens:1200, langfuseTraceId:"..."}
+type=done      payload:{messageId:9, tokens:1200}
 type=error     payload:{message:"..."}
 ```
 
@@ -661,7 +660,7 @@ type=run       payload:{runId:100, status:"failure", output:{...}, error:"..."}
 - `Manager.Get(agentKey)` → 缓存的 `ChatModelAgent`（ReAct）：
   - Tools：① **内置工具**（见下 builtin）② MCP 工具（按 `mcp_ids` 经 eino-ext mcp 拉取）③ `search_component`（向量检索 component_meta）④ `rulechain_*`（创建/校验/发布规则链）⑤ `skill_*` 工具
   - Skills：按 `skill_ids` 加载 SKILL.md（Eino skill middleware）
-  - Memory：`memory_backend`；Langfuse callback 写 `langfuse_trace_id`
+  - Memory：`memory_backend`
   - SubAgent：按 `agent_sub_agent` 把子 Agent 注册为工具（Agent-as-Tool）
 
 #### 内置工具（builtin_tools.go）—— 所有 Agent 默认挂载
@@ -724,7 +723,7 @@ detect(新增/变更/删除)
 - apiKey：AES-GCM，密钥 `BABO_SECRET`（32字节）经 **.env** 注入（Viper 读取；`.env` 提供 `.env.example`，不入版本库），入库为 `api_key_enc`，接口仅回掩码。
 - 密码：bcrypt。Session：随机 128-bit ID，HttpOnly Cookie，滑动过期（默认 7 天）。
 - 所有外部输入（DSL、SKILL 内容、看板 payload、WS 消息）经校验；RuleGo JS 脚本节点在受控引擎内执行。
-- `.env` 关键项：`BABO_SECRET`、`DATABASE_DSN`、`LANGFUSE_PUBLIC_KEY/SECRET_KEY/HOST`、`HTTP_ADDR`、`GRPC_ADDR`（默认 `127.0.0.1:9000`；仅在受控反向代理或专用网络需要时显式覆盖）、`COMPONENT_SKILL_LLM`(组件 SKILL 是否用 LLM 润色, 默认 false 走模板)、`BABO_WORKSPACE`(Agent 内置工具沙箱目录, 默认 ./workspace)、`EXECUTOR_WORKERS`(规则链执行并发, 默认 8)、`BASH_ALLOWLIST`(bash 工具命令白名单, 逗号分隔, 空=黑名单模式)、`EMBEDDING_DIM`(向量维度, 默认 1536)、`EMBEDDING_MODEL_ID`(生成向量所用 llm_model.id, 可配置)、`ADMIN_INIT_PASSWORD`(首次启动 admin 初始密码, 登录后强制改密)。
+- `.env` 关键项：`BABO_SECRET`、`DATABASE_DSN`、`HTTP_ADDR`、`GRPC_ADDR`（默认 `127.0.0.1:9000`；仅在受控反向代理或专用网络需要时显式覆盖）、`COMPONENT_SKILL_LLM`(组件 SKILL 是否用 LLM 润色, 默认 false 走模板)、`BABO_WORKSPACE`(Agent 内置工具沙箱目录, 默认 ./workspace)、`EXECUTOR_WORKERS`(规则链执行并发, 默认 8)、`BASH_ALLOWLIST`(bash 工具命令白名单, 逗号分隔, 空=黑名单模式)、`EMBEDDING_DIM`(向量维度, 默认 1536)、`EMBEDDING_MODEL_ID`(生成向量所用 llm_model.id, 可配置)、`ADMIN_INIT_PASSWORD`(首次启动 admin 初始密码, 登录后强制改密)。
 
 ---
 
@@ -765,7 +764,7 @@ detect(新增/变更/删除)
 
 ### 5. 可观测性补强
 - **指标**：暴露 `/metrics`（Prometheus）：规则链执行次数/耗时/失败率、Agent token 用量、MCP 调用延迟、WS 连接数。
-- **健康检查**：`/healthz`(存活) `/readyz`(就绪: db/langfuse 可达)。
+- **健康检查**：`/healthz`(存活) `/readyz`(就绪: db 可达)。
 - **结构化日志**：Kratos log 统一 JSON，关键操作带 trace_id 串联。
 
 > 注：以上补强均为单租户下的服务端能力；多租户字段已预留（见 0 公共约定），升级时启用租户中间件即可。
@@ -823,31 +822,16 @@ services:
       retries: 12
     ports: ["0.0.0.0:5433:5432"]
 
-  langfuse:
-    image: langfuse/langfuse:2
-    environment:
-      DATABASE_URL: postgresql://babo:babo@db:5432/langfuse
-      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:-changeme-nextauth-secret}
-      NEXTAUTH_URL: http://localhost:3001
-      SALT: ${LANGFUSE_SALT:-changeme-salt}
-    depends_on:
-      db:
-        condition: service_healthy
-    ports: ["3001:3000"]                   # Langfuse Web
-
   baboflow:
     build: .
     environment:
       DATABASE_DSN: host=db user=babo password=babo dbname=baboflow port=5432 sslmode=disable
       BABO_SECRET: ${BABO_SECRET:-please-change-me-32bytes-secret!!}
-      LANGFUSE_HOST: http://langfuse:3000
       HTTP_ADDR: ":8000"
       MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:-}
       # 未设置 GRPC_ADDR：默认 127.0.0.1:9000，compose 不发布 gRPC 端口。
       # 如需内网 gRPC，仅可通过受控网络配置显式覆盖 GRPC_ADDR。
       BABO_WORKSPACE: /app/workspace      # Agent 内置工具(bash/read/write/edit/grep)沙箱
-      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
-      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
       ADMIN_INIT_PASSWORD: ${ADMIN_INIT_PASSWORD:-admin123}
     volumes:
       - workspace:/app/workspace           # 持久化 Agent 工作区
@@ -861,7 +845,7 @@ volumes:
   workspace:
 ```
 - 单容器内嵌前端 `dist`（Kratos 静态托管）+ 自动执行 DB migration（启动时 `CREATE EXTENSION IF NOT EXISTS vector` + AutoMigrate）。
-- `docker compose up -d` 一键拉起：db(pgvector) + langfuse + baboflow；浏览器访问 `http://localhost:8001`。
+- `docker compose up -d` 一键拉起：db(pgvector) + baboflow；浏览器访问 `http://localhost:8001`。
 - `.env.example` 提供 `BABO_SECRET` 等默认值；生产通过环境变量覆盖。
 
 ---

@@ -18,18 +18,11 @@ var ProviderSet = wire.NewSet(
 	NewMcpClientBuilder,
 	NewManager,
 	ProvideBuiltinTools,
-	ProvideTracer,
 )
 
 // ProvideBuiltinTools 内置工具（沙箱目录 + bash 白名单来自配置）。
 func ProvideBuiltinTools(c *conf.Config) *BuiltinTools {
 	return NewBuiltinTools(c.Workspace, c.BashAllowlist)
-}
-
-// ProvideTracer Langfuse 追踪。未配置时 NewTracer 返回 nil Tracer（下游已 nil 守卫）；
-// 返回的 func() 是清理钩子，由 wire 并入 injector 的 cleanup。
-func ProvideTracer(c *conf.Config) (*Tracer, func(), error) {
-	return NewTracer(c.LangfuseHost, c.LangfusePublicKey, c.LangfuseSecretKey)
 }
 
 // ModelFactory 由 llm_model + llm_provider 构造 OpenAI 兼容 ChatModel。

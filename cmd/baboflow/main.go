@@ -45,7 +45,6 @@ type App struct {
 	CompSync      *biz.ComponentSync
 	CompRepo      biz.ComponentRepo
 	PlatformTools *biz.PlatformTools
-	Tracer        *agentkit.Tracer
 	RateLimiters  *service.RateLimiters
 
 	// Gin 旁路 handler：仅用于注入审计器。
@@ -71,7 +70,6 @@ func newApp(
 	compSync *biz.ComponentSync,
 	compRepo biz.ComponentRepo,
 	platformTools *biz.PlatformTools,
-	tracer *agentkit.Tracer,
 	rateLimiters *service.RateLimiters,
 	feishuH *service.FeishuHandler,
 	skillH *service.SkillHandler,
@@ -81,10 +79,10 @@ func newApp(
 		ChainUC: chainUC, McpUC: mcpUC, CronUC: cronUC, BoardUC: boardUC,
 		SkillUC: skillUC, ArcheryUC: archeryUC, AuditUC: auditUC,
 		AgentManager: agentManager, Eng: eng, CompSync: compSync, CompRepo: compRepo,
-		PlatformTools: platformTools, Tracer: tracer,
-		RateLimiters: rateLimiters,
-		FeishuH:      feishuH,
-		SkillH:       skillH,
+		PlatformTools: platformTools,
+		RateLimiters:  rateLimiters,
+		FeishuH:       feishuH,
+		SkillH:        skillH,
 	}
 	agentManager.SetMemoryDB(db, c)
 	agentUC.SetSessionMemoryCleaner(agentManager)
@@ -146,7 +144,7 @@ func injectRuntime(app *App, helper *log.Helper) {
 		if err != nil {
 			return "", fmt.Errorf("获取 Agent %s 失败: %w", agentKey, err)
 		}
-		res, err := agentkit.Run(ctx, ag, nil, &agentkit.Input{Text: prompt}, nil, app.Tracer, "", "bg-"+agentKey)
+		res, err := agentkit.Run(ctx, ag, nil, &agentkit.Input{Text: prompt}, nil, "", "bg-"+agentKey)
 		if err != nil {
 			// Agent 可能已经产出完整文本，只是在收尾事件中报错；
 			// 反生成流程仍可对这段文本做校验和统一保存。

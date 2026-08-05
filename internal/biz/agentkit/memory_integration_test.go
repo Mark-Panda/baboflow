@@ -104,7 +104,7 @@ func TestRunWithBuiltinMemoryProviderUsesIdentityContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build agent: %v", err)
 	}
-	if _, err := Run(context.Background(), agent, nil, &Input{Text: "我叫 Alice，喜欢摄影"}, nil, nil, "42", "session-1"); err != nil {
+	if _, err := Run(context.Background(), agent, nil, &Input{Text: "我叫 Alice，喜欢摄影"}, nil, "42", "session-1"); err != nil {
 		t.Fatalf("run agent: %v", err)
 	}
 

@@ -79,7 +79,7 @@ web/
 | `/skills` | SkillListPage | 3,6,10 | SKILL 管理 |
 | `/agents` | AgentListPage | 1 | **Agent 菜单 = 列表**（内置 3 个 + 自定义） |
 | `/agents/:key/chat` | AgentChatPage | 1,3,6 | 某 Agent 的对话（点列表进入） |
-| `/agents/logs` | AgentLogPage | 1 | **Agent 会话日志**（会话→消息/工具调用回放，关联 Langfuse） |
+| `/agents/logs` | AgentLogPage | 1 | **Agent 会话日志**（会话→消息/工具调用回放） |
 | `/mcp` | McpPage | 11 | MCP 服务配置 |
 | `/mcp/exposures` | McpExposurePage | 7 | 已暴露工具 |
 | `/boards` | BoardListPage | 8 | 看板列表 |
@@ -94,7 +94,7 @@ web/
 ### 1.3 主布局（MainLayout）
 ```
 ┌────────────────────────────────────────────────────────────────────┐
-│ ◤ BaboFlow   规则链 · Agent · 看板          🤖默认LLM:GPT-4o │ ⚙Langfuse │ admin ▾ │ ← 顶栏
+│ ◤ BaboFlow   规则链 · Agent · 看板          🤖默认LLM:GPT-4o │ admin ▾ │ ← 顶栏
 ├──────────┬─────────────────────────────────────────────────────────┤
 │ ▣ 总览    │                                                         │
 │ ⛓ 规则链  │                                                         │
@@ -107,7 +107,7 @@ web/
 │ ⚙ LLM配置 │                                                         │
 └──────────┴─────────────────────────────────────────────────────────┘
 ```
-- 侧边 `Menu`（AntD，受控选中态随路由）；顶栏右侧显示默认 LLM、Langfuse 外链、用户下拉（改密/登出）。
+- 侧边 `Menu`（AntD，受控选中态随路由）；顶栏右侧显示默认 LLM、用户下拉（改密/登出）。
 
 ---
 
@@ -263,7 +263,7 @@ web/
 **Agent 对话 `/agents/:key/chat`（按所选 Agent 隔离会话）**
 ```
 ┌ 会话侧栏(该 Agent 的会话)─┬ 聊天区 ────────────────────────────────┐
-│ ← Agent列表   [+新会话]    │  通用助手 agent-general   [Langfuse↗] │
+│ ← Agent列表   [+新会话]    │  通用助手 agent-general                 │
 │ ▸ 生成HTTP链              │  ┌ 用户 ─────────────────────────┐    │
 │ ▸ 订单告警                │  │ 看这张架构图, 生成对应规则链    │    │
 │ ▸ …                      │  │ [🖼 arch.png] [📄 spec.pdf]    │    │ ← 附件缩略
@@ -283,7 +283,7 @@ web/
 - 会话按 `agentId` 过滤；切换 Agent 即切换会话列表与上下文。
 - **附件**：输入框「📎」上传图片/文件（先 `POST /assets` 得 assetId，随消息发送）；图片显示缩略图、文件显示名称+大小；仅当所选模型 `capability.vision=true` 时图片走多模态，否则提示。
 - **subAgent**：委派过程以「⬡ 委派 subAgent」卡片展示，可展开看子 Agent 的步骤与结论。
-- 流式渲染 token，工具/subAgent 步骤可展开；`done` 显示 tokens 与 Langfuse 链接。
+- 流式渲染 token，工具/subAgent 步骤可展开；`done` 显示 tokens。
 
 ### 2.7b Agent 会话日志 `/agents/logs`（需求1）—— 与规则链日志分离
 ```
@@ -294,12 +294,12 @@ web/
 │  10-21 12:00  12条  ✔    │  ┌ user: 帮我做HTTP接收入库链      │
 │ ▸通用助手 订单告警        │  ┌ asst: 我先看可用组件…           │
 │  10-20 18:22   8条  ✔    │  │  ▶ search_component ✔ (展开)   │
-│ ▸规则链生成器 …           │  │  tokens:1200  Langfuse↗        │
+│ ▸规则链生成器 …           │  │  tokens:1200                   │
 │                          │  └ …(逐条 user/assistant/tool)      │
 └──────────────────────────┴────────────────────────────────────┘
 ```
-- 左侧会话列表（按 Agent 过滤、显示消息数/时间/Langfuse 状态）；右侧只读回放该会话的 user/assistant/tool 序列。
-- 数据来自 `agent_session` + `agent_message`（含 toolCalls、tokens、langfuse_trace_id）。
+- 左侧会话列表（按 Agent 过滤、显示消息数/时间）；右侧只读回放该会话的 user/assistant/tool 序列。
+- 数据来自 `agent_session` + `agent_message`（含 toolCalls、tokens）。
 
 ### 2.8 MCP 配置 `/mcp`（需求11）+ 已暴露 `/mcp/exposures`（需求7）
 ```

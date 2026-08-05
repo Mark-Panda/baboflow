@@ -239,7 +239,7 @@ func TestCronProtoServiceCreatesAndTogglesJob(t *testing.T) {
 
 func TestAgentProtoServiceListsAgentsAndRejectsBlankKey(t *testing.T) {
 	now := time.Now().UTC()
-	uc := biz.NewAgentUsecase(stubAgentRepo{agents: []po.Agent{{ID: 1, Key: "agent_1", Name: "示例", UpdatedAt: now}}}, nil, nil, nil, nil)
+	uc := biz.NewAgentUsecase(stubAgentRepo{agents: []po.Agent{{ID: 1, Key: "agent_1", Name: "示例", UpdatedAt: now}}}, nil, nil, nil)
 	service := NewAgentProtoService(uc)
 
 	response, err := service.List(context.Background(), &v1.AgentListRequest{})

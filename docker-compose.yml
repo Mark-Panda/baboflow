@@ -7,8 +7,6 @@ services:
       POSTGRES_DB: baboflow
     volumes:
       - pgdata:/var/lib/postgresql/data
-      # 首次初始化时自动创建 langfuse 库（幂等）
-      - ./docker/db-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U babo -d baboflow"]
       interval: 5s
@@ -16,20 +14,6 @@ services:
       retries: 12
     ports:
       - "0.0.0.0:5433:5432"                          # 宿主 5433 转发，避免与本机已占用 5432 冲突
-
-  langfuse:
-    image: langfuse/langfuse:2
-    environment:
-      DATABASE_URL: postgresql://babo:babo@db:5432/langfuse
-      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:-changeme-nextauth-secret}
-      NEXTAUTH_URL: http://localhost:3001
-      SALT: ${LANGFUSE_SALT:-changeme-salt}
-    depends_on:
-      db:
-        condition: service_healthy
-    # 首次启动前需先建 langfuse 库：见下方 init 或手动 CREATE DATABASE langfuse;
-    ports:
-      - "3001:3000"                         # Langfuse Web（容器内 3000）
 
   baboflow:
     build: .
@@ -40,9 +24,6 @@ services:
       # /mcp SSE 端点 Bearer 令牌（外部 MCP 客户端用；空=仅会话）。生产建议设强随机值。
       MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:-}
       BABO_WORKSPACE: /app/workspace
-      LANGFUSE_HOST: http://langfuse:3000
-      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
-      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
       ADMIN_INIT_PASSWORD: ${ADMIN_INIT_PASSWORD:-admin123}
     volumes:
       - workspace:/app/workspace            # 持久化 Agent 工作区

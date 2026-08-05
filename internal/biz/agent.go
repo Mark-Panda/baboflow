@@ -53,7 +53,6 @@ type AgentUsecase struct {
 	manager *agentkit.Manager
 	cfg     *conf.Config
 	assets  AssetStore
-	tracer  *agentkit.Tracer
 	memory  SessionMemoryCleaner
 }
 
@@ -69,8 +68,8 @@ type SessionMemoryCleaner interface {
 	DeleteSessionData(ctx context.Context, userID, sessionID string) error
 }
 
-func NewAgentUsecase(repo AgentDataRepo, manager *agentkit.Manager, c *conf.Config, assets AssetStore, tracer *agentkit.Tracer) *AgentUsecase {
-	return &AgentUsecase{repo: repo, manager: manager, cfg: c, assets: assets, tracer: tracer}
+func NewAgentUsecase(repo AgentDataRepo, manager *agentkit.Manager, c *conf.Config, assets AssetStore) *AgentUsecase {
+	return &AgentUsecase{repo: repo, manager: manager, cfg: c, assets: assets}
 }
 
 func (uc *AgentUsecase) SetSessionMemoryCleaner(cleaner SessionMemoryCleaner) {
@@ -387,7 +386,7 @@ func (uc *AgentUsecase) Chat(ctx context.Context, sessionID, text string, atts [
 		return nil, err
 	}
 	useMemoryHistory := uc.cfg == nil || !uc.cfg.MemoryEnabled || !uc.cfg.MemorySessionSummary
-	res, err := agentkit.RunWithMemoryHistory(ctx, ag, history, in, &agentkit.RunCallbacks{OnEvent: onEvent}, uc.tracer, int64ToStr(userID), sessionID, useMemoryHistory)
+	res, err := agentkit.RunWithMemoryHistory(ctx, ag, history, in, &agentkit.RunCallbacks{OnEvent: onEvent}, int64ToStr(userID), sessionID, useMemoryHistory)
 	if err != nil {
 		// 仍把失败以 assistant 消息形式留痕
 		_ = uc.repo.CreateMessage(ctx, &po.AgentMessage{
