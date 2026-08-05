@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  App, Button, Card, Form, Input, Modal, Popconfirm, Radio, Select, Space, Switch,
-  Table, Tabs, Tag, Tooltip,
+  Alert, App, Button, Card, Form, Input, Modal, Popconfirm, Radio, Select, Space, Switch,
+  Table, Tabs, Tag, Tooltip, Typography,
 } from 'antd';
 import {
   PlusOutlined, ReloadOutlined, DeleteOutlined, ApiOutlined, ThunderboltOutlined,
-  EditOutlined, LinkOutlined,
+  CopyOutlined, EditOutlined, LinkOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -18,6 +18,23 @@ const TRANSPORT_LABEL: Record<string, string> = {
   stdio: 'Stdio',
   'streamable-http': 'HTTP',
 };
+
+export function getMcpSseUrl(origin: string = window.location.origin): string {
+  return `${origin.replace(/\/$/, '')}/mcp/sse`;
+}
+
+export function getMcpConfigText(origin: string = window.location.origin): string {
+  return JSON.stringify({
+    mcpServers: {
+      baboflow: {
+        url: getMcpSseUrl(origin),
+        headers: {
+          Authorization: 'Bearer <MCP_AUTH_TOKEN>',
+        },
+      },
+    },
+  }, null, 2);
+}
 
 // ============ MCP Server 配置 ============
 
@@ -305,8 +322,30 @@ function ExposurePanel() {
         content: (
           <div>
             <p>工具名：<code>{res.toolName}</code></p>
-            <p>MCP 端点（SSE）：<code>{location.origin}{res.mcpEndpoint}/sse</code></p>
-            <p style={{ color: '#888', marginBottom: 0 }}>将该地址填入任意 MCP 客户端即可调用此规则链。</p>
+            <p>
+              MCP 端点（SSE）：
+              <Typography.Text copyable={{ text: getMcpSseUrl(location.origin), tooltips: ['复制地址', '已复制'] }}>
+                {getMcpSseUrl(location.origin)}
+              </Typography.Text>
+            </p>
+            <Input.TextArea
+              value={getMcpConfigText(location.origin)}
+              readOnly
+              autoSize={{ minRows: 8, maxRows: 12 }}
+              spellCheck={false}
+              style={{ fontFamily: 'monospace', fontSize: 12 }}
+            />
+            <Typography.Text
+              copyable={{ text: getMcpConfigText(location.origin), tooltips: ['复制配置', '已复制'] }}
+            >
+              复制完整配置
+            </Typography.Text>
+            <Alert
+              type="info"
+              showIcon
+              message="使用前替换 Token"
+              description="将 <MCP_AUTH_TOKEN> 替换为服务端配置的实际 MCP_AUTH_TOKEN。"
+            />
           </div>
         ),
       });
@@ -329,6 +368,18 @@ function ExposurePanel() {
     { title: '工具名', dataIndex: 'toolName', key: 'toolName', render: (v) => <Tag color="geekblue" icon={<ApiOutlined />}>{v}</Tag> },
     { title: '描述', dataIndex: 'description', key: 'description', ellipsis: true },
     { title: '规则链', dataIndex: 'chainId', key: 'chainId', width: 180, render: (v) => <code style={{ fontSize: 12 }}>{v}</code> },
+    {
+      title: 'MCP 地址', key: 'endpoint', width: 300,
+      render: () => (
+        <Typography.Text
+          ellipsis
+          copyable={{ text: getMcpSseUrl(), tooltips: ['复制地址', '已复制'] }}
+          style={{ maxWidth: 260 }}
+        >
+          {getMcpSseUrl()}
+        </Typography.Text>
+      ),
+    },
     {
       title: '状态', dataIndex: 'enabled', key: 'enabled', width: 90,
       render: (v) => (v ? <Tag color="green">已启用</Tag> : <Tag>停用</Tag>),
@@ -354,6 +405,33 @@ function ExposurePanel() {
         </Space>
       }
     >
+      <Alert
+        type="info"
+        showIcon
+        icon={<CopyOutlined />}
+        message="外部 MCP 客户端配置"
+        description={(
+          <div>
+            <div style={{ marginBottom: 8 }}>复制以下配置到 Cursor、Claude Desktop 等 MCP 客户端：</div>
+            <Input.TextArea
+              value={getMcpConfigText()}
+              readOnly
+              autoSize={{ minRows: 8, maxRows: 12 }}
+              spellCheck={false}
+              style={{ fontFamily: 'monospace', fontSize: 12 }}
+            />
+            <Typography.Text
+              copyable={{ text: getMcpConfigText(), tooltips: ['复制配置', '已复制'] }}
+            >
+              复制完整配置
+            </Typography.Text>
+            <div style={{ marginTop: 8, color: '#8c8c8c' }}>
+              复制后将 <code>&lt;MCP_AUTH_TOKEN&gt;</code> 替换为服务端实际配置的 Token。
+            </div>
+          </div>
+        )}
+        style={{ marginBottom: 12 }}
+      />
       <Table rowKey="id" size="small" loading={loading} columns={columns} dataSource={data}
         pagination={{ pageSize: 10, showTotal: (t) => `共 ${t} 条` }} />
 

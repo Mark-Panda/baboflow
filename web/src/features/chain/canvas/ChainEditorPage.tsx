@@ -6,10 +6,12 @@ import {
   FloatButton,
   Form,
   Input,
+  Modal,
   Space,
   Spin,
   Tag,
   Tooltip,
+  Typography,
 } from "antd";
 import {
   ArrowLeftOutlined,
@@ -19,6 +21,7 @@ import {
   ApartmentOutlined,
   CheckCircleFilled,
   RobotOutlined,
+  CodeOutlined,
 } from "@ant-design/icons";
 import { useNavigate, useParams } from "react-router-dom";
 import { ReactFlowProvider, type Edge, type Node } from "@xyflow/react";
@@ -91,6 +94,8 @@ export default function ChainEditorPage() {
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [running, setRunning] = useState(false);
+  const [dslOpen, setDslOpen] = useState(false);
+  const [dslText, setDslText] = useState("");
   const loadedChainId = useRef<string | null>(null);
 
   const [stack, setStack] = useState<Frame[]>([
@@ -492,6 +497,13 @@ export default function ChainEditorPage() {
     });
   }, [name, description, inputSchema, modal, doSave]);
 
+  const onViewDsl = useCallback(() => {
+    const root = collapsedRoot();
+    const dsl = flowToDsl({ id: chainId || undefined, name }, root.nodes, root.edges);
+    setDslText(JSON.stringify(dsl, null, 2));
+    setDslOpen(true);
+  }, [chainId, collapsedRoot, name]);
+
   // ---- 发布 ----
   const onPublish = useCallback(async () => {
     setPublishing(true);
@@ -678,6 +690,9 @@ export default function ChainEditorPage() {
             <Button icon={<SaveOutlined />} loading={saving} onClick={onSave}>
               保存草稿
             </Button>
+            <Button icon={<CodeOutlined />} onClick={onViewDsl}>
+              查看 DSL
+            </Button>
             <Button
               icon={<CloudUploadOutlined />}
               loading={publishing}
@@ -782,6 +797,28 @@ export default function ChainEditorPage() {
           style={{ right: 24, bottom: 24, background: "#722ed1" }}
           onClick={() => setPanelMode((mode) => (mode === "agent" ? "none" : "agent"))}
         />
+        <Modal
+          title="规则链 DSL"
+          open={dslOpen}
+          onCancel={() => setDslOpen(false)}
+          footer={(
+            <Typography.Text
+              copyable={{ text: dslText, tooltips: ["复制 DSL", "已复制"] }}
+            >
+              复制完整 DSL
+            </Typography.Text>
+          )}
+          width={860}
+          destroyOnClose
+        >
+          <Input.TextArea
+            value={dslText}
+            readOnly
+            autoSize={{ minRows: 18, maxRows: 32 }}
+            spellCheck={false}
+            style={{ fontFamily: "monospace", fontSize: 12 }}
+          />
+        </Modal>
       </div>
     </ReactFlowProvider>
   );

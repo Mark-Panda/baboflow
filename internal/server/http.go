@@ -75,7 +75,6 @@ func NewHTTPServer(
 	sse := mcpUC.SSEHandler()
 	r.Any("/mcp/sse", mcpAuth, gin.WrapH(sse))
 	r.Any("/mcp/message", mcpAuth, gin.WrapH(sse))
-	r.Any("/mcp", mcpAuth, gin.WrapH(sse))
 
 	// 前端静态资源：仅当 web/dist 存在时注册（dev 用 vite 起前端时可为空）。
 	const distDir = "./web/dist"
