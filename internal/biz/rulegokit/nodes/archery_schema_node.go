@@ -1,9 +1,9 @@
 package nodes
 
 import (
-	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"baboflow/internal/biz/rulegokit/archeryclient"
@@ -19,6 +19,7 @@ const ArcherySchemaNodeType = "archerySchema"
 // schema 浏览的 resource 取值（对应 psql 风格的 \l \dn \dt \d）。
 const (
 	schemaResDatabases = "databases"
+	schemaResInstances = "instances"
 	schemaResSchemas   = "schemas"
 	schemaResTables    = "tables"
 	schemaResColumns   = "columns"
@@ -27,9 +28,9 @@ const (
 // ArcherySchemaNodeConfiguration archery schema 浏览节点配置。
 type ArcherySchemaNodeConfiguration struct {
 	// InstanceID 引用的 archery_instance 的 ID（实例=某连接下一个可查询数据源）。
-	InstanceID int64 `json:"instanceId" label:"Archery实例" desc:"要浏览的 Archery 实例（在连接管理中同步）" required:"true"`
+	InstanceID int64 `json:"instanceId" label:"Archery实例" desc:"要浏览的 Archery 实例；instances 资源使用默认 connection，其他资源可由消息提供"`
 	// Resource 浏览对象：databases/schemas/tables/columns。
-	Resource string `json:"resource" label:"浏览对象" desc:"databases=库 schemas=schema tables=表 columns=字段" required:"true" component:"{\"type\":\"select\",\"options\":[{\"label\":\"databases（库）\",\"value\":\"databases\"},{\"label\":\"schemas（schema）\",\"value\":\"schemas\"},{\"label\":\"tables（表）\",\"value\":\"tables\"},{\"label\":\"columns（字段）\",\"value\":\"columns\"}]}"`
+	Resource string `json:"resource" label:"浏览对象" desc:"instances=实例 databases=库 schemas=schema tables=表 columns=字段" required:"true" component:"{\"type\":\"select\",\"options\":[{\"label\":\"instances（实例）\",\"value\":\"instances\"},{\"label\":\"databases（库）\",\"value\":\"databases\"},{\"label\":\"schemas（schema）\",\"value\":\"schemas\"},{\"label\":\"tables（表）\",\"value\":\"tables\"},{\"label\":\"columns（字段）\",\"value\":\"columns\"}]}"`
 	// DBName 目标库；schemas/tables/columns 需要。留空取消息 dbName。
 	DBName string `json:"dbName" label:"数据库" desc:"schemas/tables/columns 必填；留空由上游消息 dbName 指定"`
 	// SchemaName 目标 schema；tables/columns 可用。留空取消息 schemaName。
@@ -66,28 +67,18 @@ func (n *ArcherySchemaNode) Init(_ types.Config, configuration types.Configurati
 	if err := maps.Map2Struct(configuration, &n.config); err != nil {
 		return err
 	}
-	if n.config.InstanceID <= 0 {
-		return errors.New("archerySchema 节点缺少必填配置 instanceId")
-	}
 	res := strings.TrimSpace(n.config.Resource)
 	switch res {
+	case schemaResInstances:
+		return nil
 	case schemaResDatabases:
 		// 仅列出库，无需 dbName/schemaName/tableName。
 	case schemaResSchemas, schemaResTables:
-		// Archery 的 schema/table 列表接口强制要求 db_name。
-		if strings.TrimSpace(n.config.DBName) == "" {
-			return fmt.Errorf("archerySchema 浏览 %s 需要配置 dbName（数据库）", res)
-		}
+		// dbName 可由运行时消息提供。
 	case schemaResColumns:
-		// Archery 的 column 列表接口强制要求 db_name + tb_name。
-		if strings.TrimSpace(n.config.DBName) == "" {
-			return errors.New("archerySchema 浏览 columns 需要配置 dbName（数据库）")
-		}
-		if strings.TrimSpace(n.config.TableName) == "" {
-			return errors.New("archerySchema 浏览 columns 需要配置 tableName（表名）")
-		}
+		// dbName/tableName 可由运行时消息提供。
 	default:
-		return errors.New("archerySchema 节点 resource 必须是 databases/schemas/tables/columns 之一")
+		return errors.New("archerySchema 节点 resource 必须是 instances/databases/schemas/tables/columns 之一")
 	}
 	return nil
 }
@@ -111,6 +102,24 @@ func (n *ArcherySchemaNode) OnMsg(ctx types.RuleContext, msg types.RuleMsg) {
 
 	var rt archeryclient.ResourceType
 	switch resource {
+	case schemaResInstances:
+		instances, err := listArcheryInstances(ctx.GetContext())
+		if err != nil {
+			ctx.TellFailure(msg, err)
+			return
+		}
+		items := make([]map[string]any, 0, len(instances))
+		for _, in := range instances {
+			items = append(items, map[string]any{
+				"id": in.ID, "instanceName": in.InstanceName, "dbType": in.DBType,
+			})
+		}
+		if err := writeJSON(msg, map[string]any{"resource": resource, "items": items, "count": len(items)}); err != nil {
+			ctx.TellFailure(msg, err)
+			return
+		}
+		ctx.TellSuccess(msg)
+		return
 	case schemaResDatabases:
 		rt = archeryclient.ResDatabase
 	case schemaResSchemas:
@@ -131,11 +140,17 @@ func (n *ArcherySchemaNode) OnMsg(ctx types.RuleContext, msg types.RuleMsg) {
 		return
 	}
 
-	cli, err := getClient(context.Background(), n.config.InstanceID)
+	instanceID, err := strconv.ParseInt(msgParam(msg, "instanceId", strconv.FormatInt(n.config.InstanceID, 10)), 10, 64)
+	if err != nil || instanceID <= 0 {
+		ctx.TellFailure(msg, errors.New("archerySchema 缺少有效 instanceId（配置或消息提供）"))
+		return
+	}
+	cli, err := getClient(ctx.GetContext(), instanceID)
 	if err != nil {
 		ctx.TellFailure(msg, err)
 		return
 	}
+	schema = cli.DefaultSchema(schema)
 	items, err := cli.Resource(rt, db, schema, table)
 	if err != nil {
 		ctx.TellFailure(msg, err)

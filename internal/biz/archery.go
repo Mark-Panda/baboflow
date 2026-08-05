@@ -20,6 +20,9 @@ type ArcheryRepo interface {
 	CreateConnection(ctx context.Context, c *po.ArcheryConnection) error
 	UpdateConnection(ctx context.Context, c *po.ArcheryConnection) error
 	DeleteConnection(ctx context.Context, id int64) error
+	SetDefaultConnection(ctx context.Context, id int64) error
+	ClearDefaultConnection(ctx context.Context, id int64) error
+	GetDefaultConnection(ctx context.Context, tenantID int64) (*po.ArcheryConnection, error)
 
 	ListInstances(ctx context.Context, connectionID int64) ([]po.ArcheryInstance, error)
 	GetInstance(ctx context.Context, id int64) (*po.ArcheryInstance, error)
@@ -49,6 +52,7 @@ type ConnectionView struct {
 	CACert        string `json:"caCert"`
 	Remark        string `json:"remark"`
 	InstanceCount int    `json:"instanceCount"` // 该连接下已同步的实例数
+	IsDefault     bool   `json:"isDefault"`
 	CreatedAt     string `json:"createdAt"`
 	UpdatedAt     string `json:"updatedAt"`
 }
@@ -58,7 +62,7 @@ func (uc *ArcheryUsecase) toView(c *po.ArcheryConnection, instanceCount int) Con
 	return ConnectionView{
 		ID: c.ID, Name: c.Name, Endpoint: c.Endpoint,
 		Username: c.Username, Password: conf.Mask(pwd), Insecure: c.Insecure,
-		CACert: c.CACert, Remark: c.Remark, InstanceCount: instanceCount,
+		CACert: c.CACert, Remark: c.Remark, InstanceCount: instanceCount, IsDefault: c.IsDefault,
 		CreatedAt: c.CreatedAt.Format("2006-01-02 15:04:05"),
 		UpdatedAt: c.UpdatedAt.Format("2006-01-02 15:04:05"),
 	}
@@ -159,6 +163,20 @@ func (uc *ArcheryUsecase) DeleteConnection(ctx context.Context, id int64) error 
 	return uc.repo.DeleteConnection(ctx, id)
 }
 
+func (uc *ArcheryUsecase) SetDefaultConnection(ctx context.Context, id int64) error {
+	if _, err := uc.repo.GetConnection(ctx, id); err != nil {
+		return err
+	}
+	return uc.repo.SetDefaultConnection(ctx, id)
+}
+
+func (uc *ArcheryUsecase) ClearDefaultConnection(ctx context.Context, id int64) error {
+	if _, err := uc.repo.GetConnection(ctx, id); err != nil {
+		return err
+	}
+	return uc.repo.ClearDefaultConnection(ctx, id)
+}
+
 // newSiteClient 解密连接凭据，构造一个面向整个站点（未绑定具体实例）的客户端。
 // 用于登录 / 测试连接 / 拉取实例列表（这些操作不需要 instance_name）。
 func (uc *ArcheryUsecase) newSiteClient(c *po.ArcheryConnection) (*archeryclient.Client, error) {
@@ -191,10 +209,34 @@ func (uc *ArcheryUsecase) NewClientForInstance(ctx context.Context, instanceID i
 		return nil, err
 	}
 	return archeryclient.New(archeryclient.Config{
-		Endpoint: c.Endpoint, Instance: in.InstanceName,
+		Endpoint: c.Endpoint, Instance: in.InstanceName, DBType: in.DBType,
 		Username: c.Username, Password: pwd,
 		Insecure: c.Insecure, CACert: c.CACert,
 	})
+}
+
+func (uc *ArcheryUsecase) NewClientForDefaultConnection(ctx context.Context) (*archeryclient.Client, error) {
+	c, err := uc.repo.GetDefaultConnection(ctx, 0)
+	if err != nil {
+		return nil, errors.New("未配置默认 Archery connection")
+	}
+	return uc.newSiteClient(c)
+}
+
+func (uc *ArcheryUsecase) ListDefaultInstances(ctx context.Context) ([]archeryclient.InstanceInfo, error) {
+	c, err := uc.repo.GetDefaultConnection(ctx, 0)
+	if err != nil {
+		return nil, errors.New("未配置默认 Archery connection")
+	}
+	list, err := uc.SyncInstances(ctx, c.ID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]archeryclient.InstanceInfo, 0, len(list))
+	for _, in := range list {
+		out = append(out, archeryclient.InstanceInfo{ID: in.ID, InstanceName: in.InstanceName, DBType: in.DBType})
+	}
+	return out, nil
 }
 
 // InstanceView 实例回显。

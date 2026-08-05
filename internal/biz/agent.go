@@ -236,6 +236,15 @@ func (uc *AgentUsecase) ListSessions(ctx context.Context, agentKey string, userI
 }
 
 func (uc *AgentUsecase) CreateSession(ctx context.Context, agentKey, title string, userID int64) (*po.AgentSession, error) {
+	return uc.createSession(ctx, agentKey, title, "", userID)
+}
+
+// CreateChainSession 创建绑定规则链的 Agent 会话，供画布生成器恢复同一规则链上下文。
+func (uc *AgentUsecase) CreateChainSession(ctx context.Context, agentKey, title, chainID string, userID int64) (*po.AgentSession, error) {
+	return uc.createSession(ctx, agentKey, title, chainID, userID)
+}
+
+func (uc *AgentUsecase) createSession(ctx context.Context, agentKey, title, chainID string, userID int64) (*po.AgentSession, error) {
 	if _, err := uc.repo.GetAgentByKey(ctx, agentKey); err != nil {
 		return nil, ErrNotFound
 	}
@@ -245,6 +254,7 @@ func (uc *AgentUsecase) CreateSession(ctx context.Context, agentKey, title strin
 	s := &po.AgentSession{
 		ID:       uuid.NewString(),
 		AgentKey: agentKey,
+		ChainID:  chainID,
 		UserID:   &userID,
 		Title:    title,
 	}
@@ -311,7 +321,9 @@ type ChatAttachment struct {
 }
 
 // Chat 执行一轮对话：持久化 user 消息、运行 agent 流式回调、持久化 assistant 消息。
-func (uc *AgentUsecase) Chat(ctx context.Context, sessionID, text string, atts []ChatAttachment, userID int64, onEvent func(*agentkit.StreamEvent)) (*agentkit.RunResult, error) {
+// canvasDSL 为当前画布规则链 DSL（仅 agent-chain-builder 增量编辑时非空）：
+// 注入当轮喂模型的 user 消息前缀，但不落库、不进历史。
+func (uc *AgentUsecase) Chat(ctx context.Context, sessionID, text string, atts []ChatAttachment, userID int64, canvasDSL string, onEvent func(*agentkit.StreamEvent)) (*agentkit.RunResult, error) {
 	sess, err := uc.ownSession(ctx, sessionID, userID)
 	if err != nil {
 		return nil, err
@@ -326,8 +338,17 @@ func (uc *AgentUsecase) Chat(ctx context.Context, sessionID, text string, atts [
 	}
 	history := agentHistory(historyRows)
 
+	// 画布生成器：把当前画布 DSL 注入当轮喂模型的文本（不落库、不进历史）。
+	// 持久化的 user 消息仍用原始 text，避免大串 DSL 污染会话历史与列表。
+	textForModel := text
+	if sess.AgentKey == "agent-chain-builder" && strings.TrimSpace(canvasDSL) != "" {
+		textForModel = fmt.Sprintf(
+			"<current_canvas_dsl>\n%s\n</current_canvas_dsl>\n\n用户请求: %s",
+			canvasDSL, text)
+	}
+
 	// 构建多模态输入（图片附件 → ImageInput）
-	in := &agentkit.Input{Text: text}
+	in := &agentkit.Input{Text: textForModel}
 	attJSON := []map[string]any{}
 	for _, at := range atts {
 		asset, err := uc.repo.GetAsset(ctx, at.AssetID)
@@ -406,10 +427,24 @@ func agentHistory(rows []po.AgentMessage) []*schema.AgenticMessage {
 		case "user":
 			history = append(history, schema.UserAgenticMessage(row.Content))
 		case "assistant":
+			content := row.Content
+			if content == "" && len(row.ToolCalls) > 0 {
+				var calls []struct {
+					Question *agentkit.UserQuestion `json:"question"`
+				}
+				if json.Unmarshal(row.ToolCalls, &calls) == nil {
+					for _, call := range calls {
+						if call.Question != nil && call.Question.Question != "" {
+							content = "需要用户确认：" + call.Question.Question
+							break
+						}
+					}
+				}
+			}
 			history = append(history, &schema.AgenticMessage{
 				Role: schema.AgenticRoleTypeAssistant,
 				ContentBlocks: []*schema.ContentBlock{
-					schema.NewContentBlock(&schema.AssistantGenText{Text: row.Content}),
+					schema.NewContentBlock(&schema.AssistantGenText{Text: content}),
 				},
 			})
 		}

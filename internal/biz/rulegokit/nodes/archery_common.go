@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -17,10 +18,13 @@ import (
 // 与 AgentRunner 同一 DI 模式，进程启动时经 SetArcheryClientFactory 注入
 // （实现即 biz.ArcheryUsecase.NewClientForInstance），便于单测替换、避免 nodes 反向依赖 biz。
 type ClientFactory func(ctx context.Context, instanceID int64) (*archeryclient.Client, error)
+type InstanceListFactory func(ctx context.Context) ([]archeryclient.InstanceInfo, error)
 
 var (
-	clientFactory   ClientFactory
-	clientFactoryMu sync.RWMutex
+	clientFactory         ClientFactory
+	clientFactoryMu       sync.RWMutex
+	instanceListFactory   InstanceListFactory
+	instanceListFactoryMu sync.RWMutex
 )
 
 // SetArcheryClientFactory 注入客户端工厂（在装配处构造 ArcheryUsecase 后调用）。
@@ -29,6 +33,22 @@ func SetArcheryClientFactory(f ClientFactory) {
 	clientFactoryMu.Lock()
 	defer clientFactoryMu.Unlock()
 	clientFactory = f
+}
+
+func SetArcheryInstanceListFactory(f InstanceListFactory) {
+	instanceListFactoryMu.Lock()
+	defer instanceListFactoryMu.Unlock()
+	instanceListFactory = f
+}
+
+func listArcheryInstances(ctx context.Context) ([]archeryclient.InstanceInfo, error) {
+	instanceListFactoryMu.RLock()
+	f := instanceListFactory
+	instanceListFactoryMu.RUnlock()
+	if f == nil {
+		return nil, errors.New("archery 实例列表工厂未初始化")
+	}
+	return f(ctx)
 }
 
 // getClient 取注入的工厂并构造客户端；未注入返回错误。
@@ -56,8 +76,15 @@ func msgParam(msg types.RuleMsg, key, def string) string {
 	if data != "" && json.Valid([]byte(data)) {
 		var m map[string]any
 		if json.Unmarshal([]byte(data), &m) == nil {
-			if s, ok := m[key].(string); ok && strings.TrimSpace(s) != "" {
-				return strings.TrimSpace(s)
+			switch v := m[key].(type) {
+			case string:
+				if strings.TrimSpace(v) != "" {
+					return strings.TrimSpace(v)
+				}
+			case float64:
+				return strconv.FormatInt(int64(v), 10)
+			case json.Number:
+				return v.String()
 			}
 		}
 	}

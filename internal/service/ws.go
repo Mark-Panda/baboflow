@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -34,6 +35,9 @@ type wsInbound struct {
 	AgentKey  string  `json:"agentKey"`
 	Content   string  `json:"content"`
 	AssetIDs  []int64 `json:"assetIds"`
+	// ChainDSL 当前画布规则链 DSL（仅 agent-chain-builder 增量编辑时携带），
+	// 注入当轮对话上下文，不落库、不进历史。
+	ChainDSL string `json:"chainDsl,omitempty"`
 }
 
 var wsUpgrader = websocket.Upgrader{
@@ -68,13 +72,21 @@ type WsHub struct {
 	bySess    map[string]map[*wsConn]bool // sessionID → 连接集
 	conns     int
 	chatSlots chan struct{}
+	pendingMu sync.Mutex
+	runSeq    uint64
+	pending   map[string][]string // runID → apply_chain_dsl 参数栈
 }
 
 type wsConn struct {
 	conn   *websocket.Conn
 	userID int64
 	ctx    context.Context
+	cancel context.CancelFunc
 	mu     sync.Mutex // 写串行化
+}
+
+func newWsConnContext(requestCtx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithCancel(context.WithoutCancel(requestCtx))
 }
 
 func NewWsHub(agentUC *biz.AgentUsecase, auth *biz.AuthUsecase) *WsHub {
@@ -83,6 +95,7 @@ func NewWsHub(agentUC *biz.AgentUsecase, auth *biz.AuthUsecase) *WsHub {
 		auth:      auth,
 		bySess:    map[string]map[*wsConn]bool{},
 		chatSlots: make(chan struct{}, 32),
+		pending:   map[string][]string{},
 	}
 }
 
@@ -110,15 +123,20 @@ func (h *WsHub) Handle(c *gin.Context) {
 	}
 	h.conns++
 	h.mu.Unlock()
-	wc := &wsConn{conn: conn, userID: user.ID, ctx: c.Request.Context()}
+	connCtx, cancelConn := newWsConnContext(c.Request.Context())
+	wc := &wsConn{conn: conn, userID: user.ID, ctx: connCtx, cancel: cancelConn}
 	biz.WsConnections.Inc()
 	defer biz.WsConnections.Dec()
+	defer cancelConn()
 	defer func() {
 		h.mu.Lock()
 		h.conns--
 		h.mu.Unlock()
 	}()
 	defer h.cleanup(wc)
+	done := make(chan struct{})
+	defer close(done)
+	go h.keepAlive(wc, done)
 
 	conn.SetReadLimit(1 << 20)
 	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Minute))
@@ -130,11 +148,35 @@ func (h *WsHub) Handle(c *gin.Context) {
 		if err != nil {
 			return
 		}
+		// 普通业务帧也算活跃信号，避免长时间 Agent 运行期间读超时。
+		_ = conn.SetReadDeadline(time.Now().Add(2 * time.Minute))
 		var in wsInbound
 		if err := json.Unmarshal(raw, &in); err != nil {
 			continue
 		}
 		h.dispatch(wc, &in)
+	}
+}
+
+func (h *WsHub) keepAlive(wc *wsConn, done <-chan struct{}) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-done:
+			return
+		case <-ticker.C:
+			wc.mu.Lock()
+			err := wc.conn.WriteControl(
+				websocket.PingMessage,
+				nil,
+				time.Now().Add(10*time.Second),
+			)
+			wc.mu.Unlock()
+			if err != nil {
+				return
+			}
+		}
 	}
 }
 
@@ -220,6 +262,7 @@ func (h *WsHub) handleChatInput(wc *wsConn, in *wsInbound) {
 	if !h.subscribe(in.SessionID, wc) {
 		return
 	}
+	runID := h.newRunID()
 
 	atts := make([]biz.ChatAttachment, 0, len(in.AssetIDs))
 	for _, id := range in.AssetIDs {
@@ -227,7 +270,9 @@ func (h *WsHub) handleChatInput(wc *wsConn, in *wsInbound) {
 	}
 
 	onEvent := func(ev *agentkit.StreamEvent) {
-		h.broadcast(in.SessionID, toWsFrame(in.SessionID, ev))
+		if frame := h.toWsFrame(in.SessionID, runID, ev); frame != nil {
+			h.broadcast(in.SessionID, frame)
+		}
 	}
 
 	// 异步执行，避免阻塞该连接的读循环（支持并发订阅其它会话）
@@ -243,7 +288,8 @@ func (h *WsHub) handleChatInput(wc *wsConn, in *wsInbound) {
 	}
 	go func() {
 		defer func() { <-h.chatSlots }()
-		_, err := h.agentUC.Chat(wc.ctx, in.SessionID, in.Content, atts, wc.userID, onEvent)
+		defer h.clearRun(runID)
+		_, err := h.agentUC.Chat(wc.ctx, in.SessionID, in.Content, atts, wc.userID, in.ChainDSL, onEvent)
 		if err != nil {
 			h.broadcast(in.SessionID, &WsFrame{
 				Channel: "agent-chat",
@@ -254,18 +300,85 @@ func (h *WsHub) handleChatInput(wc *wsConn, in *wsInbound) {
 	}()
 }
 
+func (h *WsHub) newRunID() string {
+	h.pendingMu.Lock()
+	defer h.pendingMu.Unlock()
+	h.runSeq++
+	return fmt.Sprintf("agent-run-%d", h.runSeq)
+}
+
+func (h *WsHub) clearRun(runID string) {
+	h.pendingMu.Lock()
+	delete(h.pending, runID)
+	h.pendingMu.Unlock()
+}
+
 // toWsFrame 把 agentkit 流事件映射为前端契约帧。
-func toWsFrame(sessionID string, ev *agentkit.StreamEvent) *WsFrame {
+func (h *WsHub) toWsFrame(sessionID, runID string, ev *agentkit.StreamEvent) *WsFrame {
 	switch ev.Type {
 	case "text":
 		return &WsFrame{Channel: "agent-chat", Type: "delta", Data: map[string]any{
 			"sessionId": sessionID, "delta": ev.Delta, "agent": ev.Agent, "done": false,
 		}}
 	case "tool_call":
+		if ev.ToolName == biz.AskUserToolName {
+			var question struct {
+				Question   string   `json:"question"`
+				Options    []string `json:"options"`
+				Multiple   bool     `json:"multiple"`
+				AllowOther bool     `json:"allowOther"`
+			}
+			if err := json.Unmarshal([]byte(ev.ToolArgs), &question); err == nil && question.Question != "" {
+				return &WsFrame{Channel: "agent-chat", Type: "question", Data: map[string]any{
+					"sessionId":  sessionID,
+					"questionId": ev.CallID,
+					"question":   question.Question,
+					"options":    question.Options,
+					"multiple":   question.Multiple,
+					"allowOther": question.AllowOther,
+				}}
+			}
+		}
+		// apply_chain_dsl 的完整 DSL 由调用入参携带（tool_result 会被截断），
+		// 先暂存调用参数，等工具成功返回后再发 chain_dsl，避免失败 DSL 提前应用。
+		if ev.ToolName == biz.ApplyChainToolName {
+			dsl := ev.ToolArgs
+			var inner struct {
+				DSL string `json:"dsl"`
+			}
+			if err := json.Unmarshal([]byte(ev.ToolArgs), &inner); err == nil && inner.DSL != "" {
+				dsl = inner.DSL
+			}
+			h.pendingMu.Lock()
+			h.pending[runID] = append(h.pending[runID], dsl)
+			h.pendingMu.Unlock()
+			return nil
+		}
 		return &WsFrame{Channel: "agent-chat", Type: "tool_call", Data: map[string]any{
 			"sessionId": sessionID, "tool": ev.ToolName, "input": ev.ToolArgs, "status": "running",
 		}}
 	case "tool_result":
+		if ev.ToolName == biz.ApplyChainToolName {
+			h.pendingMu.Lock()
+			pending := h.pending[runID]
+			var dsl string
+			if len(pending) > 0 {
+				dsl = pending[0]
+				h.pending[runID] = pending[1:]
+				if len(h.pending[runID]) == 0 {
+					delete(h.pending, runID)
+				}
+			}
+			h.pendingMu.Unlock()
+			if isApplyChainSuccess(ev.ToolOut) && dsl != "" {
+				return &WsFrame{Channel: "agent-chat", Type: "chain_dsl", Data: map[string]any{
+					"sessionId": sessionID, "dsl": dsl, "agent": ev.Agent,
+				}}
+			}
+			return &WsFrame{Channel: "agent-chat", Type: "tool_call", Data: map[string]any{
+				"sessionId": sessionID, "tool": ev.ToolName, "output": ev.ToolOut, "status": "error",
+			}}
+		}
 		return &WsFrame{Channel: "agent-chat", Type: "tool_call", Data: map[string]any{
 			"sessionId": sessionID, "tool": ev.ToolName, "output": ev.ToolOut, "status": "done",
 		}}
@@ -280,4 +393,11 @@ func toWsFrame(sessionID string, ev *agentkit.StreamEvent) *WsFrame {
 	default:
 		return &WsFrame{Channel: "agent-chat", Type: ev.Type, Data: map[string]any{"sessionId": sessionID}}
 	}
+}
+
+func isApplyChainSuccess(output string) bool {
+	var result struct {
+		OK bool `json:"ok"`
+	}
+	return json.Unmarshal([]byte(strings.TrimSpace(output)), &result) == nil && result.OK
 }

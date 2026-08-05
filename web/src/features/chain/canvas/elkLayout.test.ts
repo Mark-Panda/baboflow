@@ -1,7 +1,38 @@
 import { describe, expect, it } from 'vitest';
 import type { Edge, Node } from '@xyflow/react';
 
-import { layoutFlowElk } from './elkLayout';
+import { layoutFlowElk, layoutFlowTree } from './elkLayout';
+
+describe('layoutFlowTree', () => {
+  it('递归布局容器节点的子画布', async () => {
+    const nodes = [{
+      id: 'loop',
+      type: 'container',
+      position: { x: 0, y: 0 },
+      data: {
+        ruleType: 'for',
+        name: '遍历',
+        relationTypes: ['Success'],
+        subFlow: {
+          nodes: [{
+            id: 'sub',
+            type: 'rule',
+            position: { x: 0, y: 0 },
+            data: { ruleType: 'log', name: '日志', relationTypes: ['Success'] },
+          }],
+          edges: [],
+        },
+      },
+    }] as never[];
+
+    const laid = await layoutFlowTree(nodes, []);
+    const subFlow = (laid[0].data as { subFlow: { nodes: Node[] } }).subFlow;
+    expect(subFlow.nodes[0].position).toEqual(expect.objectContaining({
+      x: expect.any(Number),
+      y: expect.any(Number),
+    }));
+  });
+});
 
 function n(id: string, x = 0, y = 0): Node {
   return { id, type: 'rule', position: { x, y }, data: { ruleType: 'log', name: id, category: 'action', configuration: {} } } as Node;

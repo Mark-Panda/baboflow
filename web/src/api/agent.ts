@@ -31,6 +31,7 @@ export interface AgentInput {
 export interface AgentSession {
   id: string;
   agentKey: string;
+  chainId?: string;
   title: string;
   createdAt: string;
   updatedAt: string;
@@ -41,6 +42,15 @@ export interface ToolCallRec {
   input: string;
   output?: string;
   status: 'ok' | 'error';
+  questionId?: string;
+  question?: AgentQuestion;
+}
+
+export interface AgentQuestion {
+  question: string;
+  options: string[];
+  multiple?: boolean;
+  allowOther?: boolean;
 }
 
 export interface AttachmentRef {
@@ -97,8 +107,8 @@ export function listSessions(agentKey: string): Promise<{ list: AgentSession[] }
   return http.get(`/agents/${encodeURIComponent(agentKey)}/sessions`) as never;
 }
 
-export function createSession(agentKey: string, title?: string): Promise<AgentSession> {
-  return http.post(`/agents/${encodeURIComponent(agentKey)}/sessions`, { title }) as never;
+export function createSession(agentKey: string, title?: string, chainId?: string): Promise<AgentSession> {
+  return http.post(`/agents/${encodeURIComponent(agentKey)}/sessions`, { title, chainId }) as never;
 }
 
 export function deleteSession(sessionId: string): Promise<{ ok: boolean }> {

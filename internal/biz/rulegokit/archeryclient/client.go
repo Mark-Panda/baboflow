@@ -37,6 +37,7 @@ var ErrAuthFailed = errors.New("archery 认证失败，请检查用户名/密码
 type Config struct {
 	Endpoint string // Archery 基础地址，如 https://archery.example.com
 	Instance string // Archery 实例名（Query/Resource 必填；ListInstances 可空）
+	DBType   string // Archery 实例数据库类型（如 pgsql/mysql/redis）
 	Username string
 	Password string
 	Insecure bool   // 跳过 TLS 校验（不安全）
@@ -115,6 +116,21 @@ func buildTLSConfig(cfg Config) (*tls.Config, error) {
 
 // Instance 返回配置的实例名（诊断用）。
 func (c *Client) Instance() string { return c.cfg.Instance }
+
+// DefaultSchema 返回未指定 schema 时应使用的默认值。
+// PostgreSQL 在 Archery 资源接口中需要显式 schema，默认使用 public；
+// 其他数据库类型保持空值，避免把 PostgreSQL 约定错误地带入其他方言。
+func (c *Client) DefaultSchema(schema string) string {
+	if strings.TrimSpace(schema) != "" {
+		return strings.TrimSpace(schema)
+	}
+	switch strings.ToLower(strings.TrimSpace(c.cfg.DBType)) {
+	case "pg", "pgsql", "postgres", "postgresql":
+		return "public"
+	default:
+		return ""
+	}
+}
 
 // Endpoint 返回配置的基础地址（诊断用）。
 func (c *Client) Endpoint() string { return c.endpoint.String() }
@@ -317,20 +333,20 @@ func (c *Client) ListInstances() ([]InstanceInfo, error) {
 	q.Add("tag_codes[]", "can_read")
 	status, body, err := c.do(reqSpec{method: "GET", path: "/group/user_all_instances/", query: q, autoLogin: true})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Archery /group/user_all_instances/: %w", err)
 	}
 	if status >= 500 {
-		return nil, fmt.Errorf("archery 服务端错误 HTTP %d", status)
+		return nil, fmt.Errorf("Archery /group/user_all_instances/: 服务端错误 HTTP %d", status)
 	}
 	if status >= 400 {
-		return nil, fmt.Errorf("archery HTTP %d: %s", status, snippet(body))
+		return nil, fmt.Errorf("Archery /group/user_all_instances/: HTTP %d: %s", status, snippet(body))
 	}
 	var env instancesEnvelope
 	if err := json.Unmarshal(body, &env); err != nil {
-		return nil, fmt.Errorf("解析 user_all_instances 响应: %w (body: %s)", err, snippet(body))
+		return nil, fmt.Errorf("Archery /group/user_all_instances/: 解析响应: %w (body: %s)", err, snippet(body))
 	}
 	if env.Status != 0 {
-		return nil, &ServerError{Status: env.Status, Msg: env.Msg}
+		return nil, fmt.Errorf("Archery /group/user_all_instances/: %w", &ServerError{Status: env.Status, Msg: env.Msg})
 	}
 	return env.Data, nil
 }
@@ -349,23 +365,23 @@ func (c *Client) Query(db, schema, sql string, limit int) (*QueryResult, error) 
 	}
 	status, body, err := c.do(reqSpec{method: "POST", path: "/query/", form: form, autoLogin: true})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Archery /query/: %w", err)
 	}
 	if status >= 500 {
-		return nil, fmt.Errorf("archery 服务端错误 HTTP %d", status)
+		return nil, fmt.Errorf("Archery /query/: 服务端错误 HTTP %d", status)
 	}
 	if status >= 400 {
-		return nil, fmt.Errorf("archery HTTP %d: %s", status, snippet(body))
+		return nil, fmt.Errorf("Archery /query/: HTTP %d: %s", status, snippet(body))
 	}
 	var env queryEnvelope
 	if err := json.Unmarshal(body, &env); err != nil {
-		return nil, fmt.Errorf("解析 query 响应: %w (body: %s)", err, snippet(body))
+		return nil, fmt.Errorf("Archery /query/: 解析响应: %w (body: %s)", err, snippet(body))
 	}
 	if env.Status != 0 {
-		return nil, &ServerError{Status: env.Status, Msg: env.Msg}
+		return nil, fmt.Errorf("Archery /query/: %w", &ServerError{Status: env.Status, Msg: env.Msg})
 	}
 	if env.Data == nil {
-		return nil, errors.New("archery 返回 ok 但 data 为空")
+		return nil, errors.New("Archery /query/: 返回 ok 但 data 为空")
 	}
 	return env.Data, nil
 }
@@ -399,20 +415,20 @@ func (c *Client) Resource(rt ResourceType, db, schema, table string) ([]string, 
 	}
 	status, body, err := c.do(reqSpec{method: "GET", path: "/instance/instance_resource/", query: q, autoLogin: true})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Archery /instance/instance_resource/: %w", err)
 	}
 	if status >= 500 {
-		return nil, fmt.Errorf("archery 服务端错误 HTTP %d", status)
+		return nil, fmt.Errorf("Archery /instance/instance_resource/: 服务端错误 HTTP %d", status)
 	}
 	if status >= 400 {
-		return nil, fmt.Errorf("archery HTTP %d: %s", status, snippet(body))
+		return nil, fmt.Errorf("Archery /instance/instance_resource/: HTTP %d: %s", status, snippet(body))
 	}
 	var env listEnvelope
 	if err := json.Unmarshal(body, &env); err != nil {
-		return nil, fmt.Errorf("解析 resource 响应: %w (body: %s)", err, snippet(body))
+		return nil, fmt.Errorf("Archery /instance/instance_resource/: 解析响应: %w (body: %s)", err, snippet(body))
 	}
 	if env.Status != 0 {
-		return nil, &ServerError{Status: env.Status, Msg: env.Msg}
+		return nil, fmt.Errorf("Archery /instance/instance_resource/: %w", &ServerError{Status: env.Status, Msg: env.Msg})
 	}
 	return env.Data, nil
 }

@@ -62,3 +62,22 @@ export async function layoutFlowElk(nodes: Node[], edges: Edge[]): Promise<Node[
     return { ...n, position: { x: p.x, y: p.y } };
   });
 }
+
+// 递归整理根画布及所有容器子画布。子画布先布局，避免应用 Agent DSL 后内部节点仍然重叠。
+export async function layoutFlowTree(nodes: Node[], edges: Edge[]): Promise<Node[]> {
+  const withSubflows = await Promise.all(
+    nodes.map(async (node) => {
+      const data = node.data as RuleNodeData;
+      if (!data.subFlow) return node;
+      const childNodes = await layoutFlowTree(data.subFlow.nodes, data.subFlow.edges);
+      return {
+        ...node,
+        data: {
+          ...data,
+          subFlow: { nodes: childNodes, edges: data.subFlow.edges },
+        },
+      };
+    }),
+  );
+  return layoutFlowElk(withSubflows, edges);
+}

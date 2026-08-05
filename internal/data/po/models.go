@@ -145,6 +145,7 @@ type AgentSession struct {
 	ID        string    `gorm:"primaryKey;size:64" json:"id"` // uuid
 	TenantID  int64     `gorm:"index;not null;default:0" json:"tenantId"`
 	AgentKey  string    `gorm:"size:64;index;not null" json:"agentKey"`
+	ChainID   string    `gorm:"size:64;index" json:"chainId,omitempty"`
 	UserID    *int64    `gorm:"index" json:"userId,omitempty"`
 	Title     string    `gorm:"size:255;not null;default:''" json:"title"`
 	CreatedAt time.Time `json:"createdAt"`
@@ -360,6 +361,7 @@ type ArcheryConnection struct {
 	Insecure    bool      `gorm:"not null;default:false" json:"insecure"`      // 跳过 TLS 校验（不安全）
 	CACert      string    `gorm:"type:text;not null;default:''" json:"caCert"` // 额外信任的 CA（PEM 文本，可空）
 	Remark      string    `gorm:"size:512;not null;default:''" json:"remark"`
+	IsDefault   bool      `gorm:"not null;default:false" json:"isDefault"`
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
 }

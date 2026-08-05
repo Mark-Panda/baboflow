@@ -167,6 +167,7 @@ func injectRuntime(app *App, helper *log.Helper) {
 	// 规则链节点执行器
 	nodes.SetAgentRunner(runAgent)
 	nodes.SetArcheryClientFactory(app.ArcheryUC.NewClientForInstance)
+	nodes.SetArcheryInstanceListFactory(app.ArcheryUC.ListDefaultInstances)
 
 	// cron agent 任务（仅需 error）
 	app.CronUC.SetAgentRunner(func(ctx context.Context, agentKey, prompt string) error {

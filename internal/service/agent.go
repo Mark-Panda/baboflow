@@ -102,13 +102,14 @@ func (h *AgentHandler) ListSessions(c *gin.Context) {
 }
 
 type createSessionReq struct {
-	Title string `json:"title"`
+	Title   string `json:"title"`
+	ChainID string `json:"chainId"`
 }
 
 func (h *AgentHandler) CreateSession(c *gin.Context) {
 	var in createSessionReq
 	_ = c.ShouldBindJSON(&in)
-	s, err := h.uc.CreateSession(c.Request.Context(), c.Param("key"), in.Title, CurrentUserID(c))
+	s, err := h.uc.CreateChainSession(c.Request.Context(), c.Param("key"), in.Title, in.ChainID, CurrentUserID(c))
 	if err != nil {
 		h.agentErr(c, err)
 		return

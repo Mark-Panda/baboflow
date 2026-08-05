@@ -11,6 +11,8 @@ export interface WsSubscribe {
   agentKey?: string;
   content?: string;
   assetIds?: number[];
+  // 当前画布规则链 DSL（仅 agent-chain-builder 增量编辑时携带）
+  chainDsl?: string;
   // chain-debug
   chainId?: string;
 }
@@ -36,6 +38,22 @@ export interface AgentToolCall {
   input: string;
   output?: string;
   status: 'running' | 'done' | 'error';
+}
+
+export interface AgentQuestion {
+  sessionId: string;
+  questionId: string;
+  question: string;
+  options: string[];
+  multiple: boolean;
+  allowOther: boolean;
+}
+
+// agent-chat：apply_chain_dsl 工具触发，携带完整规则链 DSL（可直接 dslToFlow）
+export interface AgentChainDsl {
+  sessionId: string;
+  dsl: string;
+  agent?: string;
 }
 
 // ---- chain-debug ----

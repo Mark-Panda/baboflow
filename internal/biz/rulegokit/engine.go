@@ -126,14 +126,24 @@ func (m *Manager) Get(chainID string) (types.RuleEngine, bool) {
 // 一次节点执行 = 一条记录：In 为流入消息、Out 为流出消息、DurationMs 为耗时。
 // 同一节点被多次触发（循环/并行）时按触发顺序产生多条。
 type NodeTrace struct {
-	NodeID       string `json:"nodeId"`
-	FlowType     string `json:"flowType"`
-	RelationType string `json:"relationType"`
-	Data         string `json:"data"` // 兼容旧字段：等同 Out（无 Out 时为 In）
-	In           string `json:"in,omitempty"`
-	Out          string `json:"out,omitempty"`
-	DurationMs   int64  `json:"durationMs,omitempty"`
-	Err          string `json:"err,omitempty"`
+	NodeID       string        `json:"nodeId"`
+	FlowType     string        `json:"flowType"`
+	RelationType string        `json:"relationType"`
+	Data         string        `json:"data"` // 兼容旧字段：等同 Out（无 Out 时为 In）
+	In           string        `json:"in,omitempty"`
+	Out          string        `json:"out,omitempty"`
+	Input        *TraceMessage `json:"input,omitempty"`
+	Output       *TraceMessage `json:"output,omitempty"`
+	DurationMs   int64         `json:"durationMs,omitempty"`
+	Err          string        `json:"err,omitempty"`
+}
+
+// TraceMessage 是节点执行时的完整消息快照，包含 msg、metadata 及消息类型。
+type TraceMessage struct {
+	Msg      string            `json:"msg"`
+	Metadata map[string]string `json:"metadata"`
+	Type     string            `json:"type"`
+	DataType string            `json:"dataType"`
 }
 
 // RunResult 一次同步执行的结果。
@@ -187,6 +197,7 @@ func runOnEngine(eng types.RuleEngine, chainID, dataType, data string, metadata 
 			mu.Lock()
 			defer mu.Unlock()
 			data := m.GetData()
+			snapshot := traceMessage(m)
 			if flowType == types.In {
 				// 新的一次节点执行：追加一条记录，记录输入与起始时间。
 				open[nodeID] = len(res.Traces)
@@ -196,6 +207,7 @@ func runOnEngine(eng types.RuleEngine, chainID, dataType, data string, metadata 
 					FlowType: flowType,
 					In:       data,
 					Data:     data,
+					Input:    snapshot,
 				})
 				return
 			}
@@ -203,7 +215,10 @@ func runOnEngine(eng types.RuleEngine, chainID, dataType, data string, metadata 
 			idx, ok := open[nodeID]
 			if !ok {
 				// 没有配对的 IN（异常情况）：单独成一条。
-				tr := NodeTrace{NodeID: nodeID, FlowType: flowType, RelationType: relationType, Out: data, Data: data}
+				tr := NodeTrace{
+					NodeID: nodeID, FlowType: flowType, RelationType: relationType,
+					Out: data, Data: data, Output: snapshot,
+				}
 				if err != nil {
 					tr.Err = err.Error()
 				}
@@ -215,6 +230,7 @@ func runOnEngine(eng types.RuleEngine, chainID, dataType, data string, metadata 
 			tr.RelationType = relationType
 			tr.Out = data
 			tr.Data = data
+			tr.Output = snapshot
 			if st, has := starts[nodeID]; has {
 				tr.DurationMs = time.Since(st).Milliseconds()
 			}
@@ -232,4 +248,17 @@ func runOnEngine(eng types.RuleEngine, chainID, dataType, data string, metadata 
 		}),
 	)
 	return res
+}
+
+func traceMessage(m types.RuleMsg) *TraceMessage {
+	metadata := map[string]string{}
+	if md := m.GetMetadata(); md != nil {
+		metadata = md.Values()
+	}
+	return &TraceMessage{
+		Msg:      m.GetData(),
+		Metadata: metadata,
+		Type:     m.GetType(),
+		DataType: string(m.GetDataType()),
+	}
 }

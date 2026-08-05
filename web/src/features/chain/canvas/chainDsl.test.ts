@@ -9,6 +9,7 @@ import {
   relationTypesForNode,
   type DslChain,
 } from './chainDsl';
+import { shouldAutoLayout, summarizeCanvasDiff } from './agentCanvas';
 
 const sampleDsl: DslChain = {
   ruleChain: { id: 'chain_1', name: 'demo', root: true },
@@ -154,5 +155,50 @@ describe('availableRelationsForEdge', () => {
   it('无占用时返回全部', () => {
     expect(availableRelationsForEdge(['Success', 'Failure'], []))
       .toEqual(['Success', 'Failure']);
+  });
+});
+
+describe('Agent 画布变更', () => {
+  it('统计节点和连线变更', () => {
+    const before = {
+      nodes: [{ id: 'a', position: { x: 0, y: 0 }, data: { name: 'A' } }] as never[],
+      edges: [],
+    };
+    const after = {
+      nodes: [{ id: 'a', position: { x: 10, y: 10 }, data: { name: 'A' } }, {
+        id: 'b',
+        position: { x: 100, y: 0 },
+        data: { name: 'B' },
+      }] as never[],
+      edges: [{ source: 'a', target: 'b', data: { relationType: 'Success' } }] as never[],
+    };
+    expect(summarizeCanvasDiff(before, after)).toEqual({
+      addedNodes: 1,
+      removedNodes: 0,
+      changedNodes: 1,
+      addedEdges: 1,
+      removedEdges: 0,
+    });
+  });
+
+  it('结构变化且 DSL 未提供完整坐标时需要自动布局', () => {
+    const before = { nodes: [{ id: 'a' }] as never[], edges: [] };
+    const after = { nodes: [{ id: 'a' }, { id: 'b' }] as never[], edges: [] };
+    expect(shouldAutoLayout({
+      metadata: { nodes: [{ id: 'a', type: 'log' }, { id: 'b', type: 'log' }] },
+    }, before, after)).toBe(true);
+  });
+
+  it('Agent 提供完整坐标时保留其布局', () => {
+    const before = { nodes: [{ id: 'a' }] as never[], edges: [] };
+    const after = { nodes: [{ id: 'a' }, { id: 'b' }] as never[], edges: [] };
+    expect(shouldAutoLayout({
+      metadata: {
+        nodes: [
+          { id: 'a', type: 'log', additionalInfo: { position: { x: 1, y: 2 } } },
+          { id: 'b', type: 'log', additionalInfo: { position: { x: 3, y: 4 } } },
+        ],
+      },
+    }, before, after)).toBe(false);
   });
 });

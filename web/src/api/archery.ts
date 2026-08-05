@@ -12,6 +12,7 @@ export interface ArcheryConnection {
   caCert: string;
   remark: string;
   instanceCount: number; // 该连接下已同步的实例数
+  isDefault: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -48,6 +49,8 @@ export const archeryApi = {
   updateConnection: (id: number, in_: ArcheryConnectionInput) =>
     http.put<unknown, unknown>(`/archery/connections/${id}`, in_),
   deleteConnection: (id: number) => http.delete<unknown, unknown>(`/archery/connections/${id}`),
+  setDefaultConnection: (id: number) => http.post<unknown, unknown>(`/archery/connections/${id}/default`),
+  clearDefaultConnection: (id: number) => http.delete<unknown, unknown>(`/archery/connections/${id}/default`),
   testConnection: (id: number) =>
     http.post<unknown, ArcheryTestResult>(`/archery/connections/${id}/test`),
   listInstances: (connectionId: number) =>

@@ -119,6 +119,18 @@ func TestClient_ServerErrorOnBadSQL(t *testing.T) {
 	}
 }
 
+func TestClient_QueryErrorIncludesArcheryAPIContext(t *testing.T) {
+	var logins int32
+	srv := fakeArchery(t, &logins)
+	defer srv.Close()
+
+	cli, _ := New(testConfig(srv.URL))
+	_, err := cli.Query("orders", "public", "BAD", 100)
+	if err == nil || !strings.Contains(err.Error(), "Archery /query/") {
+		t.Fatalf("expected Archery query API context, got %v", err)
+	}
+}
+
 func TestClient_Resource(t *testing.T) {
 	var logins int32
 	srv := fakeArchery(t, &logins)
@@ -157,5 +169,26 @@ func TestClient_LoginBadPassword(t *testing.T) {
 func TestClient_RejectsEmptyEndpoint(t *testing.T) {
 	if _, err := New(Config{Endpoint: "  "}); err == nil {
 		t.Fatal("expected error for empty endpoint")
+	}
+}
+
+func TestClient_DefaultSchemaForPostgreSQL(t *testing.T) {
+	postgres, err := New(Config{Endpoint: "http://archery.test", DBType: "pgsql"})
+	if err != nil {
+		t.Fatalf("New postgres client: %v", err)
+	}
+	if got := postgres.DefaultSchema(""); got != "public" {
+		t.Fatalf("postgres default schema = %q, want public", got)
+	}
+	if got := postgres.DefaultSchema("custom"); got != "custom" {
+		t.Fatalf("explicit postgres schema = %q, want custom", got)
+	}
+
+	mysql, err := New(Config{Endpoint: "http://archery.test", DBType: "mysql"})
+	if err != nil {
+		t.Fatalf("New mysql client: %v", err)
+	}
+	if got := mysql.DefaultSchema(""); got != "" {
+		t.Fatalf("mysql default schema = %q, want empty", got)
 	}
 }

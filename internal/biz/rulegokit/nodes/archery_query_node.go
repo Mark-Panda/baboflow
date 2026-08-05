@@ -1,9 +1,9 @@
 package nodes
 
 import (
-	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/rulego/rulego"
@@ -17,7 +17,7 @@ const ArcheryQueryNodeType = "archeryQuery"
 // ArcheryQueryNodeConfiguration archery 查询节点配置。
 type ArcheryQueryNodeConfiguration struct {
 	// InstanceID 引用的 archery_instance 的 ID（实例=某连接下一个可查询数据源）。
-	InstanceID int64 `json:"instanceId" label:"Archery实例" desc:"要查询的 Archery 实例（在连接管理中同步）" required:"true"`
+	InstanceID int64 `json:"instanceId" label:"Archery实例" desc:"要查询的 Archery 实例；留空由消息 instanceId 提供"`
 	// DBName 目标数据库；留空则取消息元数据/JSON 体的 dbName。
 	DBName string `json:"dbName" label:"数据库" desc:"目标数据库名；留空由上游消息 dbName 指定"`
 	// SchemaName 目标 schema；留空则取消息 schemaName（Archery 默认按实例默认 schema）。
@@ -58,9 +58,6 @@ func (n *ArcheryQueryNode) Init(_ types.Config, configuration types.Configuratio
 	if err := maps.Map2Struct(configuration, &n.config); err != nil {
 		return err
 	}
-	if n.config.InstanceID <= 0 {
-		return errors.New("archeryQuery 节点缺少必填配置 instanceId")
-	}
 	if n.config.LimitNum <= 0 {
 		n.config.LimitNum = 100
 	}
@@ -87,11 +84,17 @@ func (n *ArcheryQueryNode) OnMsg(ctx types.RuleContext, msg types.RuleMsg) {
 	db := msgParam(msg, "dbName", strings.TrimSpace(n.config.DBName))
 	schema := msgParam(msg, "schemaName", strings.TrimSpace(n.config.SchemaName))
 
-	cli, err := getClient(context.Background(), n.config.InstanceID)
+	instanceID, err := strconv.ParseInt(msgParam(msg, "instanceId", strconv.FormatInt(n.config.InstanceID, 10)), 10, 64)
+	if err != nil || instanceID <= 0 {
+		ctx.TellFailure(msg, errors.New("archeryQuery 缺少有效 instanceId（配置或消息提供）"))
+		return
+	}
+	cli, err := getClient(ctx.GetContext(), instanceID)
 	if err != nil {
 		ctx.TellFailure(msg, err)
 		return
 	}
+	schema = cli.DefaultSchema(schema)
 	res, err := cli.Query(db, schema, sql, n.config.LimitNum)
 	if err != nil {
 		ctx.TellFailure(msg, fmt.Errorf("archery 查询失败: %w", err))

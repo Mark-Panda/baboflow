@@ -36,27 +36,45 @@ func NewPlatformTools(deps *PlatformDeps) *PlatformTools {
 
 // Tools 返回全部平台工具。
 func (p *PlatformTools) Tools() ([]tool.BaseTool, error) {
-	return p.tools(true)
-}
-
-// ToolsForAgent 返回指定 Agent 可用的平台工具。
-// SKILL 反生成器由外层统一保存结果，不暴露 skill_create，避免重复写入。
-func (p *PlatformTools) ToolsForAgent(agentKey string) ([]tool.BaseTool, error) {
-	return p.tools(agentKey != "agent-skill-generator")
-}
-
-func (p *PlatformTools) tools(includeSkillCreate bool) ([]tool.BaseTool, error) {
-	var out []tool.BaseTool
-	builders := []func() (tool.InvokableTool, error){
+	return p.build([]func() (tool.InvokableTool, error){
 		p.searchComponentTool,
 		p.validateChainTool,
 		p.getChainTool,
 		p.createChainTool,
 		p.listPublishedChainsTool,
+		p.createSkillTool,
+	})
+}
+
+// ToolsForAgent 返回指定 Agent 可用的平台工具。
+//   - agent-chain-builder：在画布内生成/编辑规则链，用 apply_chain_dsl 把 DSL 回传画布，
+//     不暴露 rulechain_create（落库）与 skill_create，避免绕开画布直接写库。
+//   - agent-skill-generator：SKILL 反生成结果由外层统一保存，不暴露 skill_create，避免重复写入。
+func (p *PlatformTools) ToolsForAgent(agentKey string) ([]tool.BaseTool, error) {
+	switch agentKey {
+	case "agent-chain-builder":
+		return p.build([]func() (tool.InvokableTool, error){
+			p.searchComponentTool,
+			p.validateChainTool,
+			p.askUserTool,
+			p.applyChainTool,
+		})
+	case "agent-skill-generator":
+		// 保持与原逻辑一致：全部平台工具，仅去掉 skill_create（反生成结果由外层统一保存）。
+		return p.build([]func() (tool.InvokableTool, error){
+			p.searchComponentTool,
+			p.validateChainTool,
+			p.getChainTool,
+			p.createChainTool,
+			p.listPublishedChainsTool,
+		})
+	default:
+		return p.Tools()
 	}
-	if includeSkillCreate {
-		builders = append(builders, p.createSkillTool)
-	}
+}
+
+func (p *PlatformTools) build(builders []func() (tool.InvokableTool, error)) ([]tool.BaseTool, error) {
+	var out []tool.BaseTool
 	for _, b := range builders {
 		t, err := b()
 		if err != nil {
@@ -65,6 +83,41 @@ func (p *PlatformTools) tools(includeSkillCreate bool) ([]tool.BaseTool, error) 
 		out = append(out, t)
 	}
 	return out, nil
+}
+
+// ---- ask_user ----
+
+const AskUserToolName = "ask_user"
+
+type askUserInput struct {
+	Question   string   `json:"question" jsonschema:"description=需要用户确认的问题,required"`
+	Options    []string `json:"options,omitempty" jsonschema:"description=可选答案列表"`
+	Multiple   bool     `json:"multiple,omitempty" jsonschema:"description=是否允许多选"`
+	AllowOther bool     `json:"allowOther,omitempty" jsonschema:"description=是否允许用户填写其他答案"`
+}
+
+func (p *PlatformTools) askUserTool() (tool.InvokableTool, error) {
+	return utils.InferTool(AskUserToolName,
+		"向用户提出一个需要澄清的问题。调用后必须停止本轮生成，不要调用 apply_chain_dsl；等待用户回答后再继续。",
+		func(ctx context.Context, in askUserInput) (string, error) {
+			if strings.TrimSpace(in.Question) == "" {
+				return "", fmt.Errorf("question 不能为空")
+			}
+			if len(in.Options) == 0 && !in.AllowOther {
+				return "", fmt.Errorf("options 不能为空，或必须允许用户填写其他答案")
+			}
+			payload := map[string]any{
+				"question":   strings.TrimSpace(in.Question),
+				"options":    in.Options,
+				"multiple":   in.Multiple,
+				"allowOther": in.AllowOther,
+			}
+			data, err := json.Marshal(payload)
+			if err != nil {
+				return "", err
+			}
+			return string(data), nil
+		})
 }
 
 // ---- search_component ----
@@ -118,6 +171,29 @@ func (p *PlatformTools) validateChainTool() (tool.InvokableTool, error) {
 				return "校验失败: " + err.Error(), nil
 			}
 			return "校验通过: DSL 合法", nil
+		})
+}
+
+// ---- apply_chain_dsl ----
+
+// ApplyChainToolName 是把规则链 DSL 回传画布的专用工具名。
+// 完整 DSL 由该工具的调用入参(tool_call 帧)携带给前端，而非 tool_result(会被截断)。
+const ApplyChainToolName = "apply_chain_dsl"
+const ApplyChainSuccessMarker = `{"ok":true,"message":"已应用到画布"}`
+
+type applyChainInput struct {
+	DSL string `json:"dsl" jsonschema:"description=要应用到画布的完整规则链 DSL JSON 字符串,required"`
+}
+
+func (p *PlatformTools) applyChainTool() (tool.InvokableTool, error) {
+	return utils.InferTool(ApplyChainToolName,
+		"把最终确定的完整规则链 DSL 应用到用户当前画布(不落库)。调用前必须先用 rulechain_validate 校验通过。入参 dsl 必须是完整 DSL。",
+		func(ctx context.Context, in applyChainInput) (string, error) {
+			if err := rulegokit.Validate(json.RawMessage(in.DSL)); err != nil {
+				return "", fmt.Errorf("DSL 校验失败, 请修正后重新调用 apply_chain_dsl: %w", err)
+			}
+			// 不落库。完整 DSL 由 tool_call 入参携带给前端，这里只回简短确认。
+			return ApplyChainSuccessMarker, nil
 		})
 }
 

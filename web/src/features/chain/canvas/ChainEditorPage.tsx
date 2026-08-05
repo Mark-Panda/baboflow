@@ -3,6 +3,7 @@ import {
   App,
   Breadcrumb,
   Button,
+  FloatButton,
   Form,
   Input,
   Space,
@@ -17,6 +18,7 @@ import {
   CaretRightOutlined,
   ApartmentOutlined,
   CheckCircleFilled,
+  RobotOutlined,
 } from "@ant-design/icons";
 import { useNavigate, useParams } from "react-router-dom";
 import { ReactFlowProvider, type Edge, type Node } from "@xyflow/react";
@@ -29,6 +31,8 @@ import FlowCanvas from "./FlowCanvas";
 import NodeConfigPanel from "./NodeConfigPanel";
 import DebugPanel from "./DebugPanel";
 import InputSchemaField from "./InputSchemaField";
+import ChainAgentPanel from "./ChainAgentPanel";
+import { setApplyChainDslHandler, useCanvasChatStore } from "@/stores/canvasChatStore";
 import {
   dslToFlow,
   flowToDsl,
@@ -37,7 +41,8 @@ import {
   RuleNodeData,
   DslChain,
 } from "./chainDsl";
-import { layoutFlowElk } from "./elkLayout";
+import { layoutFlowElk, layoutFlowTree } from "./elkLayout";
+import { shouldAutoLayout, summarizeCanvasDiff } from "./agentCanvas";
 import { useCanvasStore } from "@/stores/canvasStore";
 import "./canvas.css";
 import "@xyflow/react/dist/style.css";
@@ -77,8 +82,8 @@ export default function ChainEditorPage() {
   const [name, setName] = useState("未命名规则链");
   const [description, setDescription] = useState("");
   const [inputSchema, setInputSchema] = useState<Record<string, unknown> | undefined>(undefined);
-  // 调试控制台是否显示在节点设置面板（点「调试」后打开）
-  const [debugOpen, setDebugOpen] = useState(false);
+  // 右侧面板互斥：空白、节点配置、调试控制台、Agent 对话。
+  const [panelMode, setPanelMode] = useState<"none" | "config" | "debug" | "agent">("none");
   const [status, setStatus] = useState<string>("draft");
   const [version, setVersion] = useState(0);
   const [dirty, setDirty] = useState(false);
@@ -92,6 +97,7 @@ export default function ChainEditorPage() {
     { nodeId: null, label: "根", nodes: [], edges: [] },
   ]);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const [agentUndo, setAgentUndo] = useState<Frame[] | null>(null);
 
   const nodeStates = useCanvasStore((s) => s.nodeStates);
   const setNodeState = useCanvasStore((s) => s.setNodeState);
@@ -161,6 +167,7 @@ export default function ChainEditorPage() {
         const { nodes, edges } = dslToFlow((c.dsl as DslChain) ?? {}, components);
         setStack([{ nodeId: null, label: "根", nodes, edges }]);
         loadedChainId.current = id!;
+        setAgentUndo(null);
         setDirty(false);
       } catch {
         message.error("加载规则链失败");
@@ -169,6 +176,12 @@ export default function ChainEditorPage() {
       }
     })();
   }, [id, isNew, compData, components, message]); // eslint-disable-line
+
+  // 路由切换到另一条规则链时，必须切换对应的 Agent 会话，避免上下文串链。
+  useEffect(() => {
+    useCanvasChatStore.getState().reset();
+    setPanelMode("none");
+  }, [id]);
 
   // ---- 进入/退出子画布 ----
   const enterSub = useCallback(
@@ -183,6 +196,7 @@ export default function ChainEditorPage() {
         { nodeId, label: d.name, nodes: sub.nodes, edges: sub.edges },
       ]);
       setSelectedNode(null);
+      setPanelMode("none");
     },
     [cur.nodes],
   );
@@ -238,8 +252,94 @@ export default function ChainEditorPage() {
     return next[0];
   }, [stack]);
 
+  // ---- 规则链生成器（画布内嵌 Agent）----
+  // 取当前画布完整 DSL（含各层子画布），发送给 Agent 做增量编辑。
+  const getCanvasDsl = useCallback((): string => {
+    const root = collapsedRoot();
+    const dsl = flowToDsl(
+      { id: chainId || undefined, name },
+      root.nodes,
+      root.edges,
+    );
+    try {
+      return JSON.stringify(dsl);
+    } catch {
+      return "";
+    }
+  }, [collapsedRoot, chainId, name]);
+
+  // 应用 Agent 回传的完整 DSL 到当前画布：整树替换根 Frame（DSL 已含增量编辑结果）。
+  const handleApplyDsl = useCallback(
+    async (dslStr: string) => {
+      try {
+        const dsl = JSON.parse(dslStr) as DslChain;
+        const { nodes, edges } = dslToFlow(dsl, components);
+        if (!validateSwitchConfigurations(nodes)) {
+          message.error("应用规则链失败：条件分支配置不完整");
+          return;
+        }
+        const currentRoot = collapsedRoot();
+        const nextRoot = { nodeId: null, label: "根", nodes, edges };
+        const diff = summarizeCanvasDiff(currentRoot, nextRoot);
+        const previewNodes = shouldAutoLayout(dsl, currentRoot, nextRoot)
+          ? await layoutFlowTree(nodes, edges)
+          : nodes;
+        const apply = () => {
+          setAgentUndo(stack);
+          setStack([{ nodeId: null, label: "根", nodes: previewNodes, edges }]);
+          setSelectedNode(null);
+          setDirty(true);
+          message.success("已把生成的规则链应用到画布，可继续编辑后保存");
+        };
+        modal.confirm({
+          title: "确认应用 Agent 修改？",
+          okText: "应用",
+          cancelText: "取消",
+          content: (
+            <div>
+              <div>新增节点：{diff.addedNodes} 个，删除节点：{diff.removedNodes} 个，修改节点：{diff.changedNodes} 个。</div>
+              <div>新增连线：{diff.addedEdges} 条，删除连线：{diff.removedEdges} 条。</div>
+              <div style={{ marginTop: 8, color: "#8c8c8c" }}>
+                应用后仍需点击“保存草稿”才会写入规则链。
+              </div>
+            </div>
+          ),
+          onOk: apply,
+        });
+      } catch (error) {
+        const reason = error instanceof SyntaxError ? "DSL 格式错误" : "画布布局或结构处理失败";
+        message.error(`应用规则链失败：${reason}`);
+      }
+    },
+    [collapsedRoot, components, message, modal, stack],
+  );
+
+  const undoAgentChange = useCallback(() => {
+    if (!agentUndo) return;
+    setStack(agentUndo);
+    setAgentUndo(null);
+    setSelectedNode(null);
+    setDirty(true);
+    message.success("已撤销 Agent 修改");
+  }, [agentUndo, message]);
+
+  // 挂载时注册"应用到画布"回调；卸载时清空并重置生成器会话。
+  useEffect(() => {
+    const disposeApplyHandler = setApplyChainDslHandler((dsl, sessionId) => {
+      if (sessionId !== useCanvasChatStore.getState().sessionId) return;
+      void handleApplyDsl(dsl);
+    });
+    return () => {
+      disposeApplyHandler();
+      useCanvasChatStore.getState().reset();
+    };
+  }, [handleApplyDsl]);
+
   // ---- 节点操作 ----
-  const onSelectNode = useCallback((n: Node | null) => setSelectedNode(n), []);
+  const onSelectNode = useCallback((n: Node | null) => {
+    setSelectedNode(n);
+    setPanelMode(n ? "config" : "none");
+  }, []);
   const onNodeDataChange = useCallback(
     (nodeId: string, patch: Partial<RuleNodeData>) => {
       const current = cur.nodes.find((n) => n.id === nodeId);
@@ -336,11 +436,13 @@ export default function ChainEditorPage() {
           message.success("已创建规则链");
           navigate(`/chains/${created.id}/edit`, { replace: true });
           setDirty(false);
+          setAgentUndo(null);
           return created.id;
         }
         await chainApi.update(chainId, { name: chainName, description: desc, inputSchema: schema, dsl });
         message.success("已保存草稿");
         setDirty(false);
+        setAgentUndo(null);
         return chainId;
       } catch {
         /* 拦截器提示 */
@@ -412,10 +514,26 @@ export default function ChainEditorPage() {
 
   // ---- 调试 ----
   const onDebug = useCallback(
-    async (input: string) => {
+    async (input: string, metadataInput: string) => {
       if (!chainId) {
         message.warning("请先保存后再调试");
         return;
+      }
+      let metadata: Record<string, string> | undefined;
+      if (metadataInput.trim()) {
+        try {
+          const parsed = JSON.parse(metadataInput) as unknown;
+          if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+            message.warning("metadata 必须是 JSON 对象");
+            return;
+          }
+          metadata = Object.fromEntries(
+            Object.entries(parsed).map(([key, value]) => [key, String(value)]),
+          );
+        } catch {
+          message.warning("metadata JSON 格式不正确");
+          return;
+        }
       }
       // 先保存当前草稿（直接保存，不弹键设置），确保调试的是画布最新内容
       const savedId = await doSave();
@@ -427,6 +545,7 @@ export default function ChainEditorPage() {
         const res = await chainApi.debug(chainId, {
           data: input,
           dataType: "JSON",
+          metadata,
         });
         setLastRun({
           output: res.output,
@@ -448,14 +567,10 @@ export default function ChainEditorPage() {
     [chainId, doSave, resetNodeStates, setLastRun, setNodeState, message],
   );
 
-  // 点顶栏「调试」：在节点设置面板中打开调试控制台（再次点击可关闭），并立即用空输入跑一次
+  // 点顶栏「调试」只打开控制台，实际请求由控制台中的「运行」触发。
   const onToggleDebug = useCallback(() => {
-    setDebugOpen((o) => {
-      const next = !o;
-      if (next) void onDebug("{}");
-      return next;
-    });
-  }, [onDebug]);
+    setPanelMode((mode) => (mode === "debug" ? "none" : "debug"));
+  }, []);
 
   const onClearDebug = useCallback(() => {
     resetNodeStates();
@@ -555,6 +670,11 @@ export default function ChainEditorPage() {
             <Tooltip title="自动整理布局">
               <Button icon={<ApartmentOutlined />} onClick={onLayout} />
             </Tooltip>
+            {agentUndo && (
+              <Button onClick={undoAgentChange}>
+                撤销 Agent 修改
+              </Button>
+            )}
             <Button icon={<SaveOutlined />} loading={saving} onClick={onSave}>
               保存草稿
             </Button>
@@ -566,7 +686,7 @@ export default function ChainEditorPage() {
               发布
             </Button>
             <Button
-              type={debugOpen ? "default" : "primary"}
+              type={panelMode === "debug" ? "default" : "primary"}
               icon={<CaretRightOutlined />}
               loading={running}
               onClick={onToggleDebug}
@@ -616,9 +736,10 @@ export default function ChainEditorPage() {
               onEnterSub={enterSub}
             />
           </div>
-          {/* 右侧：点「调试」→ 整栏为调试控制台（节点配置面板隐藏）；否则为节点设置面板 */}
+          {/* 右侧面板互斥：空白时隐藏，节点配置/调试/Agent 只显示其中一个 */}
+          {panelMode !== "none" && (
           <div className="bf-config" style={{ display: "flex", flexDirection: "column", padding: 0 }}>
-            {debugOpen ? (
+            {panelMode === "debug" ? (
               <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
                 <DebugPanel
                   running={running}
@@ -631,7 +752,7 @@ export default function ChainEditorPage() {
                   onLocateNode={onLocateNode}
                 />
               </div>
-            ) : (
+            ) : panelMode === "config" ? (
               <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
                 <NodeConfigPanel
                   node={selectedNode}
@@ -641,9 +762,26 @@ export default function ChainEditorPage() {
                   allNodes={allNodes}
                 />
               </div>
+            ) : (
+              <ChainAgentPanel
+                open
+                onClose={() => setPanelMode("none")}
+                chainId={chainId}
+                getCanvasDsl={getCanvasDsl}
+              />
             )}
           </div>
+          )}
         </div>
+
+        {/* 规则链生成器入口；对话内容显示在右侧互斥面板中 */}
+        <FloatButton
+          icon={<RobotOutlined />}
+          type="primary"
+          tooltip="规则链生成器"
+          style={{ right: 24, bottom: 24, background: "#722ed1" }}
+          onClick={() => setPanelMode((mode) => (mode === "agent" ? "none" : "agent"))}
+        />
       </div>
     </ReactFlowProvider>
   );

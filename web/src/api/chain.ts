@@ -49,8 +49,17 @@ export interface NodeTrace {
   data: string;
   in?: string;
   out?: string;
+  input?: TraceMessage;
+  output?: TraceMessage;
   durationMs?: number;
   err?: string;
+}
+
+export interface TraceMessage {
+  msg: string;
+  metadata: Record<string, string>;
+  type: string;
+  dataType: string;
 }
 
 export interface RunResult {

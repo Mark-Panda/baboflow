@@ -119,6 +119,35 @@ func TestRunAggregatesTextAndTools(t *testing.T) {
 	}
 }
 
+func TestRunStopsAfterAskUser(t *testing.T) {
+	ag := &mockAgent{events: []*adk.TypedAgentEvent[*schema.AgenticMessage]{
+		toolCallEvent("ask_user", `{"question":"请选择","options":["1","2"]}`, "q1"),
+		textEvent("不应在提问后继续输出"),
+	}}
+	var streamed []string
+	res, err := Run(context.Background(), ag, nil, &Input{Text: "生成规则链"}, &RunCallbacks{
+		OnEvent: func(ev *StreamEvent) { streamed = append(streamed, ev.Type) },
+	}, nil, "1", "sess")
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if res.Text != "" {
+		t.Fatalf("expected no text after ask_user, got %q", res.Text)
+	}
+	if len(res.ToolCalls) != 1 || res.ToolCalls[0].Question == nil {
+		t.Fatalf("expected ask_user record, got %+v", res.ToolCalls)
+	}
+	want := []string{"tool_call", "done"}
+	if len(streamed) != len(want) {
+		t.Fatalf("expect events %v, got %v", want, streamed)
+	}
+	for i := range want {
+		if streamed[i] != want[i] {
+			t.Fatalf("event %d expect %s, got %v", i, want[i], streamed)
+		}
+	}
+}
+
 // agent 运行出错时应传播 error 并发 error 事件。
 func TestRunPropagatesError(t *testing.T) {
 	errAgent := &mockAgent{events: []*adk.TypedAgentEvent[*schema.AgenticMessage]{

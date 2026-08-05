@@ -95,6 +95,32 @@ func (h *ArcheryHandler) DeleteConnection(c *gin.Context) {
 	httputil.OK(c, gin.H{})
 }
 
+func (h *ArcheryHandler) SetDefaultConnection(c *gin.Context) {
+	id, ok := pathID(c, "id")
+	if !ok {
+		return
+	}
+	if err := h.uc.SetDefaultConnection(c.Request.Context(), id); err != nil {
+		httputil.BadRequest(c, err.Error())
+		return
+	}
+	h.audit(c, biz.AuditArcheryUpdate, strconv.FormatInt(id, 10), map[string]any{"default": true})
+	httputil.OK(c, gin.H{})
+}
+
+func (h *ArcheryHandler) ClearDefaultConnection(c *gin.Context) {
+	id, ok := pathID(c, "id")
+	if !ok {
+		return
+	}
+	if err := h.uc.ClearDefaultConnection(c.Request.Context(), id); err != nil {
+		httputil.BadRequest(c, err.Error())
+		return
+	}
+	h.audit(c, biz.AuditArcheryUpdate, strconv.FormatInt(id, 10), map[string]any{"default": false})
+	httputil.OK(c, gin.H{})
+}
+
 // TestConnection 验证连接可用（登录 + 列库），供前端"测试连接"按钮。
 func (h *ArcheryHandler) TestConnection(c *gin.Context) {
 	id, ok := pathID(c, "id")

@@ -9,7 +9,7 @@ import {
   UpOutlined,
 } from '@ant-design/icons';
 
-import { NodeTrace } from '@/api/chain';
+import { NodeTrace, TraceMessage } from '@/api/chain';
 import CodeField from '@/components/CodeField';
 import { relationZhName } from './componentZh';
 
@@ -20,7 +20,7 @@ export interface DebugPanelProps {
   traces: NodeTrace[];
   // 画布节点 id -> 显示名（用于把 nodeId 映射成中文节点名）
   nodeNames?: Record<string, string>;
-  onRun: (input: string) => void;
+  onRun: (msg: string, metadata: string) => void;
   onClear: () => void;
   // 在画布中定位/选中节点
   onLocateNode?: (nodeId: string) => void;
@@ -36,7 +36,8 @@ export default function DebugPanel({
   onClear,
   onLocateNode,
 }: DebugPanelProps) {
-  const [input, setInput] = useState('{}');
+  const [msg, setMsg] = useState('{}');
+  const [metadata, setMetadata] = useState('{}');
   const [open, setOpen] = useState(true);
 
   const summary = useMemo(() => {
@@ -82,7 +83,7 @@ export default function DebugPanel({
             type="primary"
             icon={<CaretRightOutlined />}
             loading={running}
-            onClick={() => onRun(input)}
+            onClick={() => onRun(msg, metadata)}
           >
             运行
           </Button>
@@ -90,18 +91,30 @@ export default function DebugPanel({
       </div>
 
       {open && (
-        <div style={{ maxHeight: 320, overflow: 'auto', padding: '0 12px 12px' }}>
-          {/* 输入区 */}
+        <div style={{ maxHeight: 'none', overflow: 'auto', padding: '0 12px 12px' }}>
+          {/* 输入区：明确区分规则链收到的 msg 与 metadata */}
           <div style={{ marginBottom: 10 }}>
             <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>
-              输入消息（JSON）
+              msg（消息体，JSON）
             </div>
             <CodeField
               language="json"
               rows={3}
-              value={input}
-              onChange={setInput}
+              value={msg}
+              onChange={setMsg}
               placeholder='输入 JSON，如 {"t":35}'
+            />
+          </div>
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>
+              metadata（元数据，JSON）
+            </div>
+            <CodeField
+              language="json"
+              rows={3}
+              value={metadata}
+              onChange={setMetadata}
+              placeholder='输入 JSON，如 {"source":"console"}'
             />
           </div>
 
@@ -240,11 +253,11 @@ function TraceRow({
           )}
           <div>
             <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 2 }}>输入</div>
-            <ReadonlyJson value={t.in ?? ''} />
+            <ReadonlyJson value={formatTraceMessage(t.input, t.in)} />
           </div>
           <div>
             <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 2 }}>输出</div>
-            <ReadonlyJson value={t.out ?? t.data ?? ''} />
+            <ReadonlyJson value={formatTraceMessage(t.output, t.out ?? t.data)} />
           </div>
         </div>
       )}
@@ -264,7 +277,9 @@ function ReadonlyJson({ value }: { value: string }) {
         padding: 10,
         borderRadius: 6,
         overflow: 'auto',
-        maxHeight: 180,
+        maxHeight: 'none',
+        whiteSpace: 'pre-wrap',
+        overflowWrap: 'anywhere',
       }}
     >
       {formatMaybeJson(value)}
@@ -279,4 +294,18 @@ function formatMaybeJson(s: string): string {
   } catch {
     return s;
   }
+}
+
+function formatTraceMessage(message: TraceMessage | undefined, fallback: string | undefined): string {
+  if (!message) return formatMaybeJson(fallback ?? '');
+  return JSON.stringify({
+    msg: parseJson(message.msg),
+    metadata: message.metadata,
+    type: message.type,
+    dataType: message.dataType,
+  }, null, 2);
+}
+
+function parseJson(s: string): unknown {
+  try { return JSON.parse(s); } catch { return s || '(空)'; }
 }

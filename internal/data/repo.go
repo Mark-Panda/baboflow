@@ -213,6 +213,32 @@ func (r *archeryRepo) DeleteConnection(ctx context.Context, id int64) error {
 	return r.db.WithContext(ctx).Delete(&po.ArcheryConnection{}, id).Error
 }
 
+func (r *archeryRepo) SetDefaultConnection(ctx context.Context, id int64) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var c po.ArcheryConnection
+		if err := tx.First(&c, id).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&po.ArcheryConnection{}).Where("tenant_id = ?", c.TenantID).Update("is_default", false).Error; err != nil {
+			return err
+		}
+		return tx.Model(&po.ArcheryConnection{}).Where("id = ?", id).Update("is_default", true).Error
+	})
+}
+
+func (r *archeryRepo) ClearDefaultConnection(ctx context.Context, id int64) error {
+	return r.db.WithContext(ctx).Model(&po.ArcheryConnection{}).
+		Where("id = ?", id).Update("is_default", false).Error
+}
+
+func (r *archeryRepo) GetDefaultConnection(ctx context.Context, tenantID int64) (*po.ArcheryConnection, error) {
+	var c po.ArcheryConnection
+	if err := r.db.WithContext(ctx).Where("tenant_id = ? AND is_default = ?", tenantID, true).First(&c).Error; err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
 // ---- Archery 实例 ----
 
 func (r *archeryRepo) ListInstances(ctx context.Context, connectionID int64) ([]po.ArcheryInstance, error) {

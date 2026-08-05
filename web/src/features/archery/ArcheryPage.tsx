@@ -4,7 +4,7 @@ import {
   Space, Switch, Table, Tag, Tooltip,
 } from 'antd';
 import {
-  PlusOutlined, ThunderboltOutlined, EditOutlined, DeleteOutlined, SyncOutlined,
+  PlusOutlined, ThunderboltOutlined, EditOutlined, DeleteOutlined, SyncOutlined, StarOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 
@@ -74,6 +74,16 @@ export default function ArcheryPage() {
     message.success('已删除');
     load();
   };
+  const toggleDefault = async (c: ArcheryConnection) => {
+    if (c.isDefault) {
+      await archeryApi.clearDefaultConnection(c.id);
+      message.success('已取消默认连接');
+    } else {
+      await archeryApi.setDefaultConnection(c.id);
+      message.success('已设为默认连接');
+    }
+    load();
+  };
   const test = async (c: ArcheryConnection) => {
     setTestingId(c.id);
     try {
@@ -108,6 +118,7 @@ export default function ArcheryPage() {
       render: (v, c) => (
         <Space>
           <span style={{ fontWeight: 600 }}>{v}</span>
+          {c.isDefault && <Tag color="gold">默认</Tag>}
           {c.insecure && <Tag color="orange">跳过TLS校验</Tag>}
         </Space>
       ),
@@ -123,7 +134,7 @@ export default function ArcheryPage() {
     },
     { title: '备注', dataIndex: 'remark', key: 'remark', ellipsis: true },
     {
-      title: '操作', key: 'op', width: 190,
+      title: '操作', key: 'op', width: 230,
       render: (_, c) => (
         <Space size="small">
           <Tooltip title="测试连接">
@@ -136,6 +147,13 @@ export default function ArcheryPage() {
             <Button
               size="small" type="text" icon={<SyncOutlined />}
               loading={syncingId === c.id} onClick={() => sync(c)}
+            />
+          </Tooltip>
+          <Tooltip title={c.isDefault ? '取消默认连接' : '设为默认连接'}>
+            <Button
+              size="small" type="text" icon={<StarOutlined />}
+              style={c.isDefault ? { color: '#faad14' } : undefined}
+              onClick={() => toggleDefault(c)}
             />
           </Tooltip>
           <Button size="small" type="text" icon={<EditOutlined />} onClick={() => openEdit(c)} />

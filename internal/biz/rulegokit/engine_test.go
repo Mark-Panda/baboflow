@@ -122,6 +122,28 @@ func TestRunDSL_PairsInOut(t *testing.T) {
 	}
 }
 
+func TestRunDSL_TraceIncludesMessageAndMetadata(t *testing.T) {
+	res, err := RunDSL("chain_trace_payload", []byte(validDSL), "JSON", `{"a":1}`, map[string]string{
+		"traceId": "trace-001",
+	})
+	if err != nil {
+		t.Fatalf("RunDSL error: %v", err)
+	}
+	if len(res.Traces) == 0 {
+		t.Fatal("expected node trace")
+	}
+	trace := res.Traces[0]
+	if trace.Input == nil || trace.Output == nil {
+		t.Fatalf("trace should include structured input/output, got %+v", trace)
+	}
+	if trace.Input.Msg != `{"a":1}` {
+		t.Fatalf("unexpected input msg: %q", trace.Input.Msg)
+	}
+	if trace.Input.Metadata["traceId"] != "trace-001" {
+		t.Fatalf("unexpected input metadata: %+v", trace.Input.Metadata)
+	}
+}
+
 func TestRun_NotLoaded(t *testing.T) {
 	m := NewManager()
 	if _, err := m.Run("nope", "JSON", `{}`, nil); err == nil {

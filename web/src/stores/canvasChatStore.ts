@@ -2,51 +2,58 @@ import { create } from 'zustand';
 import { wsClient } from '@/ws/client';
 import type { WsFrame } from '@/ws/types';
 import * as api from '@/api/agent';
+import type { ChatMsg } from './chatStore';
 
-// 一条聊天消息（含流式中的临时消息）
-export interface ChatMsg {
-  id: number | string; // 流式中临时用 string
-  role: 'user' | 'assistant';
-  content: string;
-  toolCalls?: api.ToolCallRec[];
-  attachment?: api.AttachmentRef[];
-  streaming?: boolean;
-  question?: api.AgentQuestion & {
-    id: string;
-    answered?: boolean;
-    answer?: string;
-  };
-}
-
-interface ChatState {
+// 画布内嵌「规则链生成器」对话状态。独立于 useChatStore：
+// 现有 useChatStore 用模块级单订阅，编辑器内嵌面板若复用会与 AgentChat 页抢订阅，
+// 故单独一份 store，复用 wsClient 单例，并新增 chain_dsl 帧处理与"应用到画布"回调。
+interface CanvasChatState {
   sessionId: string | null;
   messages: ChatMsg[];
   sending: boolean;
-  subscribed: boolean;
+  open: boolean; // 面板开合
+  lastAppliedDsl: string | null;
 
   openSession: (sessionId: string) => Promise<void>;
-  send: (agentKey: string, content: string, assetIds?: number[]) => void;
+  newSession: (agentKey: string, title?: string, chainId?: string) => Promise<void>;
+  send: (agentKey: string, content: string, chainDsl?: string) => void;
   answerQuestion: (questionId: string, answer: string) => void;
+  setOpen: (open: boolean) => void;
   reset: () => void;
 }
 
 let unsubscribe: (() => void) | null = null;
+// "应用到画布"回调：由 ChainEditorPage 挂载时注册、卸载时清空（模块级，同 chatStore 的 unsubscribe 模式）。
+let applyChainDslCb: ((dsl: string, sessionId: string) => void) | null = null;
+let applyChainDslHandlerVersion = 0;
 
-export const useChatStore = create<ChatState>((set, get) => ({
+// 注册/清空"应用到画布"回调（在 chain_dsl 帧到达时触发）。
+export function setApplyChainDslHandler(
+  cb: ((dsl: string, sessionId: string) => void) | null,
+): () => void {
+  const version = ++applyChainDslHandlerVersion;
+  applyChainDslCb = cb;
+  return () => {
+    if (version === applyChainDslHandlerVersion) {
+      applyChainDslCb = null;
+    }
+  };
+}
+
+export const useCanvasChatStore = create<CanvasChatState>((set, get) => ({
   sessionId: null,
   messages: [],
   sending: false,
-  subscribed: false,
+  open: false,
+  lastAppliedDsl: null,
 
   async openSession(sessionId) {
-    // 清理旧订阅
     if (unsubscribe) {
       unsubscribe();
       unsubscribe = null;
     }
-    set({ sessionId, messages: [], sending: false, subscribed: false });
+    set({ sessionId, messages: [], sending: false, lastAppliedDsl: null });
 
-    // 加载历史
     const { list } = await api.listMessages(sessionId);
     const msgs: ChatMsg[] = list.map((m) => ({
       id: m.id,
@@ -64,19 +71,22 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
     set({ messages: msgs });
 
-    // 订阅 WS
     unsubscribe = wsClient.subscribe((frame) => handleFrame(frame, set, get));
     wsClient.send({ action: 'subscribe', channel: 'agent-chat', sessionId });
-    set({ subscribed: true });
   },
 
-  send(agentKey, content, assetIds) {
+  async newSession(agentKey, title, chainId) {
+    const s = await api.createSession(agentKey, title, chainId);
+    await get().openSession(s.id);
+  },
+
+  send(agentKey, content, chainDsl) {
     const { sessionId, sending } = get();
     if (!sessionId || sending) return;
-    // 乐观插入 user 消息 + 占位的流式 assistant 消息
     const tempId = `tmp-${Date.now()}`;
     set((s) => ({
       sending: true,
+      lastAppliedDsl: null,
       messages: [
         ...s.messages,
         { id: `u-${Date.now()}`, role: 'user', content },
@@ -89,7 +99,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       sessionId,
       agentKey,
       content,
-      assetIds: assetIds && assetIds.length ? assetIds : undefined,
+      chainDsl: chainDsl || undefined,
     });
   },
 
@@ -103,26 +113,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
   },
 
+  setOpen(open) {
+    set({ open });
+  },
+
   reset() {
     if (unsubscribe) {
       unsubscribe();
       unsubscribe = null;
     }
-    set({ sessionId: null, messages: [], sending: false, subscribed: false });
+    set({ sessionId: null, messages: [], sending: false, open: false, lastAppliedDsl: null });
   },
 }));
 
 function handleFrame(
   frame: WsFrame,
-  set: (fn: (s: ChatState) => Partial<ChatState>) => void,
-  get: () => ChatState
+  set: (fn: (s: CanvasChatState) => Partial<CanvasChatState>) => void,
+  get: () => CanvasChatState
 ) {
   if (frame.channel !== 'agent-chat') return;
   const data = frame.data as Record<string, unknown>;
   const sid = data.sessionId as string;
   if (sid !== get().sessionId) return;
 
-  // 找最后一条 streaming 的 assistant 消息（不存在则新建）
   const appendDelta = (delta: string) => {
     set((s) => {
       const msgs = [...s.messages];
@@ -162,17 +175,50 @@ function handleFrame(
         const idx = findLastStreaming(msgs);
         if (idx < 0) return {};
         const calls = [...(msgs[idx].toolCalls || [])];
-        // 若已有同名 running 记录则更新输出，否则新增
         const running = calls.map((c, i) => ({ c, i })).filter((x) => x.c.name === tool && !x.c.output).pop();
         if (data.output && running) {
           calls[running.i] = { ...running.c, output: data.output as string };
-        } else if (!data.output) {
-          calls.push(rec);
         } else {
           calls.push(rec);
         }
         msgs[idx] = { ...msgs[idx], toolCalls: calls };
         return { messages: msgs };
+      });
+      break;
+    }
+    case 'chain_dsl': {
+      // apply_chain_dsl 工具产出完整 DSL：触发"应用到画布"回调。
+      // 补一条 running 工具记录，后续 tool_result(done) 帧会找到并填 output，保持单条 Tag。
+      const dsl = (data.dsl as string) || '';
+      if (!dsl || dsl === get().lastAppliedDsl) break;
+      set((s) => {
+        const msgs = [...s.messages];
+        const idx = findLastStreaming(msgs);
+        if (idx >= 0) {
+          const calls = [...(msgs[idx].toolCalls || [])];
+          calls.push({ name: 'apply_chain_dsl', input: '', status: 'ok' });
+          msgs[idx] = { ...msgs[idx], toolCalls: calls };
+        }
+        return { messages: msgs, lastAppliedDsl: dsl };
+      });
+      if (applyChainDslCb) applyChainDslCb(dsl, sid);
+      break;
+    }
+    case 'question': {
+      const question = {
+        id: (data.questionId as string) || `question-${Date.now()}`,
+        question: (data.question as string) || '',
+        options: Array.isArray(data.options) ? data.options.filter((item): item is string => typeof item === 'string') : [],
+        multiple: data.multiple === true,
+        allowOther: data.allowOther === true,
+      };
+      if (!question.question) break;
+      set((s) => {
+        const msgs = [...s.messages];
+        const idx = findLastStreaming(msgs);
+        if (idx < 0) return {};
+        msgs[idx] = { ...msgs[idx], streaming: false, question };
+        return { messages: msgs, sending: false };
       });
       break;
     }

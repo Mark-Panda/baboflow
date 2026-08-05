@@ -206,3 +206,55 @@ func TestLLMRepo_CountAgentByModel(t *testing.T) {
 		t.Fatalf("expected 2 agents on model, got %d", n)
 	}
 }
+
+func TestArcheryRepo_DefaultConnectionIsExclusive(t *testing.T) {
+	db := newTestDB(t, &po.ArcheryConnection{})
+	repo := NewArcheryRepo(db)
+	ctx := context.Background()
+	c1 := &po.ArcheryConnection{Name: "one", Endpoint: "http://one", Username: "u", PasswordEnc: "p"}
+	c2 := &po.ArcheryConnection{Name: "two", Endpoint: "http://two", Username: "u", PasswordEnc: "p"}
+	c3 := &po.ArcheryConnection{TenantID: 42, Name: "other", Endpoint: "http://other", Username: "u", PasswordEnc: "p"}
+	if err := db.Create(c1).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(c2).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(c3).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.SetDefaultConnection(ctx, c1.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.SetDefaultConnection(ctx, c2.ID); err != nil {
+		t.Fatal(err)
+	}
+	var defaults int64
+	if err := db.Model(&po.ArcheryConnection{}).Where("is_default = ?", true).Count(&defaults).Error; err != nil {
+		t.Fatal(err)
+	}
+	if defaults != 1 {
+		t.Fatalf("expected exactly one default connection, got %d", defaults)
+	}
+	got, err := repo.GetDefaultConnection(ctx, 0)
+	if err != nil || got.ID != c2.ID {
+		t.Fatalf("expected connection %d as default, got %+v, err=%v", c2.ID, got, err)
+	}
+	if err := repo.SetDefaultConnection(ctx, c3.ID); err != nil {
+		t.Fatal(err)
+	}
+	got, err = repo.GetDefaultConnection(ctx, 0)
+	if err != nil || got.ID != c2.ID {
+		t.Fatalf("tenant 0 default changed by tenant 42, got %+v, err=%v", got, err)
+	}
+	other, err := repo.GetDefaultConnection(ctx, 42)
+	if err != nil || other.ID != c3.ID {
+		t.Fatalf("tenant 42 default missing, got %+v, err=%v", other, err)
+	}
+	if err := repo.ClearDefaultConnection(ctx, c2.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := repo.GetDefaultConnection(ctx, 0); err == nil {
+		t.Fatal("expected no default connection after clearing")
+	}
+}

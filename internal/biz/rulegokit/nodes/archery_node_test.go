@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"baboflow/internal/biz/rulegokit"
 	"baboflow/internal/biz/rulegokit/archeryclient"
 
 	"github.com/rulego/rulego"
@@ -27,6 +28,11 @@ func fakeArcheryServer(t *testing.T) *httptest.Server {
 	mux.HandleFunc("/authenticate/", func(w http.ResponseWriter, r *http.Request) {
 		http.SetCookie(w, &http.Cookie{Name: "sessionid", Value: "sess-1", Path: "/"})
 		json.NewEncoder(w).Encode(map[string]any{"status": 0, "msg": "ok", "data": nil})
+	})
+	mux.HandleFunc("/group/user_all_instances/", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{"status": 0, "msg": "ok", "data": []map[string]any{
+			{"id": 1, "instance_name": "prod", "db_type": "mysql"},
+		}})
 	})
 	mux.HandleFunc("/query/", func(w http.ResponseWriter, r *http.Request) {
 		_ = r.ParseForm()
@@ -69,7 +75,11 @@ func useFakeFactory(t *testing.T, srv *httptest.Server) {
 			Endpoint: srv.URL, Instance: "prod", Username: "u", Password: "p",
 		})
 	})
+	SetArcheryInstanceListFactory(func(_ context.Context) ([]archeryclient.InstanceInfo, error) {
+		return []archeryclient.InstanceInfo{{ID: 1, InstanceName: "prod", DBType: "mysql"}}, nil
+	})
 	t.Cleanup(func() { SetArcheryClientFactory(nil) })
+	t.Cleanup(func() { SetArcheryInstanceListFactory(nil) })
 }
 
 func TestArcheryQueryNode_FormHasDescCategoryAndFields(t *testing.T) {
@@ -101,10 +111,10 @@ func TestArcheryNodes_Registered(t *testing.T) {
 	}
 }
 
-func TestArcheryQueryNode_InitRequiresInstanceID(t *testing.T) {
+func TestArcheryQueryNode_InitAllowsRuntimeInstanceID(t *testing.T) {
 	n := &ArcheryQueryNode{}
-	if err := n.Init(types.Config{}, types.Configuration{}); err == nil {
-		t.Fatal("expected error when instanceId missing")
+	if err := n.Init(types.Config{}, types.Configuration{}); err != nil {
+		t.Fatalf("runtime instanceId should be allowed: %v", err)
 	}
 	if err := n.Init(types.Config{}, types.Configuration{"instanceId": 1}); err != nil {
 		t.Fatalf("unexpected init error: %v", err)
@@ -123,22 +133,36 @@ func TestArcherySchemaNode_InitValidatesResource(t *testing.T) {
 	if err := n.Init(types.Config{}, types.Configuration{"instanceId": 1, "resource": "databases"}); err != nil {
 		t.Fatalf("databases should not require dbName: %v", err)
 	}
-	// schemas/tables 必须 dbName（Archery 服务端强制），缺失应在 Init 报错。
-	if err := n.Init(types.Config{}, types.Configuration{"instanceId": 1, "resource": "schemas"}); err == nil {
-		t.Fatal("expected error for schemas without dbName")
+	// schemas/tables 的 dbName 可由运行时消息提供。
+	if err := n.Init(types.Config{}, types.Configuration{"resource": "schemas"}); err != nil {
+		t.Fatalf("schemas should allow runtime dbName: %v", err)
 	}
-	if err := n.Init(types.Config{}, types.Configuration{"instanceId": 1, "resource": "tables"}); err == nil {
-		t.Fatal("expected error for tables without dbName")
+	if err := n.Init(types.Config{}, types.Configuration{"resource": "tables"}); err != nil {
+		t.Fatalf("tables should allow runtime dbName: %v", err)
 	}
-	// columns 必须 dbName + tableName。
-	if err := n.Init(types.Config{}, types.Configuration{"instanceId": 1, "resource": "columns", "dbName": "orders"}); err == nil {
-		t.Fatal("expected error for columns without tableName")
+	// columns 的 dbName/tableName 可由运行时消息提供。
+	if err := n.Init(types.Config{}, types.Configuration{"resource": "columns"}); err != nil {
+		t.Fatalf("columns should allow runtime names: %v", err)
 	}
 	if err := n.Init(types.Config{}, types.Configuration{"instanceId": 1, "resource": "tables", "dbName": "orders"}); err != nil {
 		t.Fatalf("unexpected init error: %v", err)
 	}
 	if err := n.Init(types.Config{}, types.Configuration{"instanceId": 1, "resource": "columns", "dbName": "orders", "tableName": "t1"}); err != nil {
 		t.Fatalf("unexpected init error for columns: %v", err)
+	}
+}
+
+func TestArcherySchemaNode_InitAllowsRuntimeInstanceForInstances(t *testing.T) {
+	n := &ArcherySchemaNode{}
+	if err := n.Init(types.Config{}, types.Configuration{"resource": "instances"}); err != nil {
+		t.Fatalf("instances should allow runtime/default connection resolution: %v", err)
+	}
+}
+
+func TestMsgParamReadsNumericInstanceIDFromMessage(t *testing.T) {
+	msg := types.NewMsg(0, "", types.JSON, types.NewMetadata(), `{"instanceId":12}`)
+	if got := msgParam(msg, "instanceId", ""); got != "12" {
+		t.Fatalf("expected numeric instanceId to be normalized, got %q", got)
 	}
 }
 
@@ -175,6 +199,50 @@ func TestArcheryQueryNode_OnMsgUsesMessageSQL(t *testing.T) {
 	cols := out["columns"].([]any)
 	if len(cols) != 1 || cols[0] != "cnt" {
 		t.Fatalf("unexpected columns: %v", cols)
+	}
+}
+
+func TestArcheryQueryNode_OnMsgUsesRuntimeInstanceID(t *testing.T) {
+	srv := fakeArcheryServer(t)
+	defer srv.Close()
+	useFakeFactory(t, srv)
+	dsl := `{"ruleChain":{"id":"chain_archery_q_runtime","root":true},"metadata":{"nodes":[
+		{"id":"q1","type":"archeryQuery","configuration":{"sql":"SELECT 1"}}
+	],"connections":[]}}`
+	res, err := runDSLForTest("chain_archery_q_runtime", []byte(dsl), "JSON", `{"instanceId":1}`, nil)
+	if err != nil || res.Err != nil {
+		t.Fatalf("runtime instance query failed: err=%v runErr=%v", err, res.Err)
+	}
+}
+
+func TestArcheryQueryNode_MetadataInstanceOverridesMessage(t *testing.T) {
+	srv := fakeArcheryServer(t)
+	defer srv.Close()
+	useFakeFactory(t, srv)
+	dsl := `{"ruleChain":{"id":"chain_archery_q_metadata","root":true},"metadata":{"nodes":[
+		{"id":"q1","type":"archeryQuery","configuration":{"sql":"SELECT 1"}}
+	],"connections":[]}}`
+	res, err := runDSLForTest("chain_archery_q_metadata", []byte(dsl), "JSON",
+		`{"instanceId":2}`, map[string]string{"instanceId": "1"})
+	if err != nil || res.Err != nil {
+		t.Fatalf("metadata instance should override message: err=%v runErr=%v", err, res.Err)
+	}
+}
+
+func TestArcheryQueryNode_OnMsgRejectsUnknownInstance(t *testing.T) {
+	srv := fakeArcheryServer(t)
+	defer srv.Close()
+	useFakeFactory(t, srv)
+	dsl := `{"ruleChain":{"id":"chain_archery_q_bad_instance","root":true},"metadata":{"nodes":[
+		{"id":"q1","type":"archeryQuery","configuration":{"sql":"SELECT 1"}}
+	],"connections":[]}}`
+	res, err := runDSLForTest("chain_archery_q_bad_instance", []byte(dsl), "JSON",
+		`{"instanceId":2}`, nil)
+	if err != nil {
+		t.Fatalf("unknown instance run error: %v", err)
+	}
+	if res.Err == nil {
+		t.Fatal("unknown instance should fail")
 	}
 }
 
@@ -234,13 +302,111 @@ func TestArcherySchemaNode_OnMsgListsTables(t *testing.T) {
 	}
 }
 
-// columns 缺 tableName 现在在 Init 即拒绝（更早、信息更明确），无需运行期。
-func TestArcherySchemaNode_ColumnsRequiresTable(t *testing.T) {
+func TestArcherySchemaNode_OnMsgListsDatabases(t *testing.T) {
+	srv := fakeArcheryServer(t)
+	defer srv.Close()
+	useFakeFactory(t, srv)
+	dsl := `{"ruleChain":{"id":"chain_archery_databases","root":true},"metadata":{"nodes":[
+		{"id":"s1","type":"archerySchema","configuration":{"instanceId":1,"resource":"databases"}}
+	],"connections":[]}}`
+	res, err := runDSLForTest("chain_archery_databases", []byte(dsl), "JSON", `{}`, nil)
+	if err != nil || res.Err != nil {
+		t.Fatalf("database list failed: err=%v runErr=%v", err, res.Err)
+	}
+	if !strings.Contains(res.Output, `"resource":"databases"`) {
+		t.Fatalf("unexpected database output: %q", res.Output)
+	}
+}
+
+func TestArcherySchemaNode_OnMsgListsColumnsFromRuntimeFields(t *testing.T) {
+	srv := fakeArcheryServer(t)
+	defer srv.Close()
+	useFakeFactory(t, srv)
+	dsl := `{"ruleChain":{"id":"chain_archery_columns","root":true},"metadata":{"nodes":[
+		{"id":"s1","type":"archerySchema","configuration":{"resource":"columns"}}
+	],"connections":[]}}`
+	res, err := runDSLForTest("chain_archery_columns", []byte(dsl), "JSON",
+		`{"instanceId":1,"dbName":"orders","tableName":"t1"}`, nil)
+	if err != nil || res.Err != nil {
+		t.Fatalf("column list failed: err=%v runErr=%v", err, res.Err)
+	}
+	if !strings.Contains(res.Output, `"resource":"columns"`) {
+		t.Fatalf("unexpected column output: %q", res.Output)
+	}
+}
+
+func TestArcherySchemaNode_OnMsgFailsWhenRuntimeFieldMissing(t *testing.T) {
+	srv := fakeArcheryServer(t)
+	defer srv.Close()
+	useFakeFactory(t, srv)
+	dsl := `{"ruleChain":{"id":"chain_archery_missing_table","root":true},"metadata":{"nodes":[
+		{"id":"s1","type":"archerySchema","configuration":{"resource":"tables"}}
+	],"connections":[]}}`
+	res, err := runDSLForTest("chain_archery_missing_table", []byte(dsl), "JSON", `{"instanceId":1}`, nil)
+	if err != nil {
+		t.Fatalf("missing field run error: %v", err)
+	}
+	if res.Err == nil || !strings.Contains(res.Err.Error(), "dbName") {
+		t.Fatalf("expected dbName failure, got %v", res.Err)
+	}
+}
+
+func TestArcherySchemaNode_OnMsgListsInstances(t *testing.T) {
+	srv := fakeArcheryServer(t)
+	defer srv.Close()
+	useFakeFactory(t, srv)
+	dsl := `{"ruleChain":{"id":"chain_archery_instances","root":true},"metadata":{"nodes":[
+		{"id":"s1","type":"archerySchema","configuration":{"resource":"instances"}}
+	],"connections":[]}}`
+	res, err := runDSLForTest("chain_archery_instances", []byte(dsl), "JSON", `{}`, nil)
+	if err != nil || res.Err != nil {
+		t.Fatalf("instance list failed: err=%v runErr=%v", err, res.Err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal([]byte(res.Output), &out); err != nil {
+		t.Fatalf("output not JSON: %v", err)
+	}
+	if out["count"].(float64) != 1 {
+		t.Fatalf("expected one instance, got %v", out["count"])
+	}
+}
+
+func TestArcheryMCPChain_RunDSLDispatchesAction(t *testing.T) {
+	srv := fakeArcheryServer(t)
+	defer srv.Close()
+	useFakeFactory(t, srv)
+	dsl := []byte(`{"ruleChain":{"id":"chain_archery_mcp_dispatch","root":true},"metadata":{"firstNodeIndex":0,"nodes":[
+		{"id":"route","type":"switch","configuration":{"cases":[
+			{"case":"msg.action == \"listInstances\"","then":"instances"}
+		]}},
+		{"id":"instances","type":"archerySchema","configuration":{"resource":"instances"}},
+		{"id":"failure","type":"jsTransform","configuration":{"jsScript":"throw new Error('unsupported action');"}}
+	],"connections":[
+		{"fromId":"route","toId":"instances","type":"instances"},
+		{"fromId":"route","toId":"failure","type":"Default"}
+	]}}`)
+	res, err := rulegokit.RunDSL("chain_archery_mcp_dispatch", dsl, "JSON", `{"action":"listInstances"}`, nil)
+	if err != nil || res.Err != nil {
+		t.Fatalf("dispatch failed: err=%v runErr=%v", err, res.Err)
+	}
+	if !strings.Contains(res.Output, `"resource":"instances"`) {
+		t.Fatalf("expected instances output, got %q", res.Output)
+	}
+	unknown, err := rulegokit.RunDSL("chain_archery_mcp_dispatch_unknown", dsl, "JSON", `{"action":"unknown"}`, nil)
+	if err != nil {
+		t.Fatalf("unknown action run error: %v", err)
+	}
+	if unknown.Err == nil {
+		t.Fatal("unknown action should fail through Default branch")
+	}
+}
+
+func TestArcherySchemaNode_ColumnsAllowsRuntimeTable(t *testing.T) {
 	n := &ArcherySchemaNode{}
 	err := n.Init(types.Config{}, types.Configuration{
-		"instanceId": 1, "resource": "columns", "dbName": "orders",
+		"resource": "columns",
 	})
-	if err == nil || !strings.Contains(err.Error(), "tableName") {
-		t.Fatalf("expected tableName init error, got %v", err)
+	if err != nil {
+		t.Fatalf("expected runtime tableName to be allowed, got %v", err)
 	}
 }

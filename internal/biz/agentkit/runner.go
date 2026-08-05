@@ -2,6 +2,7 @@ package agentkit
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
 	aggolangfuse "github.com/CoolBanHub/aggo/pkg/langfuse"
@@ -51,6 +52,7 @@ type StreamEvent struct {
 	Type     string `json:"type"`               // text/tool_call/tool_result/done/error
 	Delta    string `json:"delta,omitempty"`    // text 增量
 	ToolName string `json:"toolName,omitempty"` // tool_call/tool_result 工具名
+	CallID   string `json:"callId,omitempty"`   // tool_call/tool_result 调用标识
 	ToolArgs string `json:"toolArgs,omitempty"` // tool_call 入参(JSON)
 	ToolOut  string `json:"toolOut,omitempty"`  // tool_result 摘要
 	Agent    string `json:"agent,omitempty"`    // 产出事件的 agent（subAgent 区分）
@@ -70,10 +72,19 @@ type RunResult struct {
 
 // ToolCallRec 一条工具调用记录（入库 agent_message.tool_calls）。
 type ToolCallRec struct {
-	Name   string `json:"name"`
-	Input  string `json:"input"`
-	Output string `json:"output"`
-	Status string `json:"status"` // ok/error
+	Name       string        `json:"name"`
+	Input      string        `json:"input"`
+	Output     string        `json:"output"`
+	Status     string        `json:"status"` // ok/error
+	QuestionID string        `json:"questionId,omitempty"`
+	Question   *UserQuestion `json:"question,omitempty"`
+}
+
+type UserQuestion struct {
+	Question   string   `json:"question"`
+	Options    []string `json:"options,omitempty"`
+	Multiple   bool     `json:"multiple,omitempty"`
+	AllowOther bool     `json:"allowOther,omitempty"`
 }
 
 // Input 构造一次用户输入（支持文本 + 图片多模态）。
@@ -155,11 +166,26 @@ func run(ctx context.Context, ag adk.TypedAgent[*schema.AgenticMessage], history
 			continue
 		}
 		collectMessage(msg, event.AgentName, &textSb, res, emit)
+		// ask_user 是一次可暂停的交互：问题帧发出后必须结束当前运行，
+		// 先持久化本轮 assistant 消息，用户回答才能在下一轮带着上下文继续。
+		if lastToolNeedsUserInput(res) {
+			res.Text = textSb.String()
+			emit(&StreamEvent{Type: "done"})
+			return res, nil
+		}
 	}
 
 	res.Text = textSb.String()
 	emit(&StreamEvent{Type: "done"})
 	return res, nil
+}
+
+func lastToolNeedsUserInput(res *RunResult) bool {
+	if res == nil || len(res.ToolCalls) == 0 {
+		return false
+	}
+	last := res.ToolCalls[len(res.ToolCalls)-1]
+	return last.Name == "ask_user" && last.Question != nil
 }
 
 // buildUserMessage 把输入组装成多模态 user 消息。
@@ -199,10 +225,18 @@ func collectMessage(msg *schema.AgenticMessage, agentName string, textSb *string
 		case schema.ContentBlockTypeFunctionToolCall:
 			if blk.FunctionToolCall != nil {
 				fc := blk.FunctionToolCall
-				res.ToolCalls = append(res.ToolCalls, ToolCallRec{
+				rec := ToolCallRec{
 					Name: fc.Name, Input: fc.Arguments, Status: "ok",
-				})
-				emit(&StreamEvent{Type: "tool_call", ToolName: fc.Name, ToolArgs: fc.Arguments, Agent: agentName})
+				}
+				if fc.Name == "ask_user" {
+					var question UserQuestion
+					if json.Unmarshal([]byte(fc.Arguments), &question) == nil && question.Question != "" {
+						rec.QuestionID = fc.CallID
+						rec.Question = &question
+					}
+				}
+				res.ToolCalls = append(res.ToolCalls, rec)
+				emit(&StreamEvent{Type: "tool_call", ToolName: fc.Name, CallID: fc.CallID, ToolArgs: fc.Arguments, Agent: agentName})
 			}
 		case schema.ContentBlockTypeFunctionToolResult:
 			if blk.FunctionToolResult != nil {
@@ -215,7 +249,7 @@ func collectMessage(msg *schema.AgenticMessage, agentName string, textSb *string
 						break
 					}
 				}
-				emit(&StreamEvent{Type: "tool_result", ToolName: fr.Name, ToolOut: summarize(out, 400), Agent: agentName})
+				emit(&StreamEvent{Type: "tool_result", ToolName: fr.Name, CallID: fr.CallID, ToolOut: summarize(out, 400), Agent: agentName})
 			}
 		}
 	}

@@ -8,7 +8,7 @@ import dayjs from 'dayjs';
 import { ReactFlow, Background, Controls, ReactFlowProvider, MarkerType } from '@xyflow/react';
 
 import { runApi, ChainRun } from '@/api/run';
-import { chainApi, ChainListItem } from '@/api/chain';
+import { chainApi, ChainListItem, TraceMessage } from '@/api/chain';
 import { componentApi } from '@/api/component';
 import StatusTag from '@/components/StatusTag';
 import { dslToFlow, EDGE_TYPE, DslChain } from '../chain/canvas/chainDsl';
@@ -176,9 +176,20 @@ function RunDetailDrawer({ run, chainName, onClose }: { run: ChainRun | null; ch
               <span style={{ color: '#a2a9bd', fontSize: 12 }}>{t.relationType || t.flowType}</span>
             </Space>
             {t.err && <div style={{ color: '#cf1322', fontSize: 12, marginTop: 4 }}>{t.err}</div>}
-            <pre style={{ margin: '6px 0 0', fontSize: 11, background: '#0f1420', color: '#d6e2ff', padding: 8, borderRadius: 6, overflow: 'auto', maxHeight: 120 }}>
-              {fmtJson(t.data)}
-            </pre>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 6 }}>
+              <div>
+                <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 3 }}>输入</div>
+                <pre style={{ margin: 0, fontSize: 11, background: '#0f1420', color: '#d6e2ff', padding: 8, borderRadius: 6, overflow: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                  {fmtTraceMessage(t.input, t.in ?? t.data)}
+                </pre>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 3 }}>输出</div>
+                <pre style={{ margin: 0, fontSize: 11, background: '#0f1420', color: '#d6e2ff', padding: 8, borderRadius: 6, overflow: 'auto', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                  {fmtTraceMessage(t.output, t.out ?? t.data)}
+                </pre>
+              </div>
+            </div>
           </div>
         ))
       )}
@@ -227,4 +238,18 @@ function RunDetailDrawer({ run, chainName, onClose }: { run: ChainRun | null; ch
 
 function fmtJson(s: string): string {
   try { return JSON.stringify(JSON.parse(s), null, 2); } catch { return s || '(空)'; }
+}
+
+function fmtTraceMessage(message: TraceMessage | undefined, fallback: string): string {
+  if (!message) return fmtJson(fallback);
+  return JSON.stringify({
+    msg: parseJson(message.msg),
+    metadata: message.metadata,
+    type: message.type,
+    dataType: message.dataType,
+  }, null, 2);
+}
+
+function parseJson(s: string): unknown {
+  try { return JSON.parse(s); } catch { return s || '(空)'; }
 }
