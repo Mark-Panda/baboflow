@@ -4,16 +4,84 @@ import "google/api/annotations.proto";
 import "google/protobuf/struct.proto";
 import "baboflow/v1/common.proto";
 option go_package = "baboflow/api/baboflow/v1;v1";
-message CronJob { int64 id = 1; string name = 2; string targetType = 3; string targetId = 4; string scheduleType = 5; string cronExpr = 6; int64 intervalSec = 7; string runAt = 8; google.protobuf.Struct payload = 9; bool enabled = 10; string lastRunAt = 11; string lastStatus = 12; string createdAt = 13; string updatedAt = 14; } message CronInput { string name = 1; string targetType = 2; string targetId = 3; string scheduleType = 4; string cronExpr = 5; int64 intervalSec = 6; string runAt = 7; google.protobuf.Struct payload = 8; } message CronJobRequest { int64 id = 1; string name = 2; string targetType = 3; string targetId = 4; string scheduleType = 5; string cronExpr = 6; int64 intervalSec = 7; string runAt = 8; google.protobuf.Struct payload = 9; } message CronJobIdRequest { int64 id = 1; } message CronJobList { repeated CronJob list = 1; } message CronOk { bool ok = 1; }
+message CronJob {
+  int64 id                       = 1;
+  string name                    = 2;
+  string targetType              = 3;
+  string targetId                = 4;
+  string scheduleType            = 5;
+  string cronExpr                = 6;
+  int64 intervalSec              = 7;
+  string runAt                   = 8;
+  google.protobuf.Struct payload = 9;
+  bool enabled                   = 10;
+  string lastRunAt               = 11;
+  string lastStatus              = 12;
+  string createdAt               = 13;
+  string updatedAt               = 14;
+}
+message CronInput {
+  string name                    = 1;
+  string targetType              = 2;
+  string targetId                = 3;
+  string scheduleType            = 4;
+  string cronExpr                = 5;
+  int64 intervalSec              = 6;
+  string runAt                   = 7;
+  google.protobuf.Struct payload = 8;
+}
+message CronJobRequest {
+  int64 id                       = 1;
+  string name                    = 2;
+  string targetType              = 3;
+  string targetId                = 4;
+  string scheduleType            = 5;
+  string cronExpr                = 6;
+  int64 intervalSec              = 7;
+  string runAt                   = 8;
+  google.protobuf.Struct payload = 9;
+}
+message CronJobIdRequest {
+  int64 id = 1;
+}
+message CronJobList {
+  repeated CronJob list = 1;
+}
+message CronOk {
+  bool ok = 1;
+}
 service CronService {
   // Old: GET /api/v1/cron.
-  rpc List(Empty) returns (CronJobList) { option (google.api.http) = { get: "/api/v1/cron-jobs" }; }
+  rpc List(Empty) returns (CronJobList) {
+    option (google.api.http) = {
+      get: "/api/v1/cron-jobs"
+    };
+  }
   // Old: POST /api/v1/cron.
-  rpc Create(CronInput) returns (CronJob) { option (google.api.http) = { post: "/api/v1/cron-jobs" body: "*" }; }
+  rpc Create(CronInput) returns (CronJob) {
+    option (google.api.http) = {
+      post: "/api/v1/cron-jobs"
+      body: "*"
+    };
+  }
   // Old: PUT /api/v1/cron/{id}.
-  rpc Update(CronJobRequest) returns (CronOk) { option (google.api.http) = { put: "/api/v1/cron-jobs/{id}" body: "*" }; }
+  rpc Update(CronJobRequest) returns (CronOk) {
+    option (google.api.http) = {
+      put: "/api/v1/cron-jobs/{id}"
+      body: "*"
+    };
+  }
   // Old: DELETE /api/v1/cron/{id}.
-  rpc Delete(CronJobIdRequest) returns (CronOk) { option (google.api.http) = { delete: "/api/v1/cron-jobs/{id}" }; }
+  rpc Delete(CronJobIdRequest) returns (CronOk) {
+    option (google.api.http) = {
+      delete: "/api/v1/cron-jobs/{id}"
+    };
+  }
   // Old: POST /api/v1/cron/{id}/toggle.
-  rpc Toggle(CronJobIdRequest) returns (CronJob) { option (google.api.http) = { post: "/api/v1/cron-jobs/{id}/toggle" body: "*" }; }
+  rpc Toggle(CronJobIdRequest) returns (CronJob) {
+    option (google.api.http) = {
+      post: "/api/v1/cron-jobs/{id}/toggle"
+      body: "*"
+    };
+  }
 }

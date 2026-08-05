@@ -4,8 +4,30 @@ import "google/api/annotations.proto";
 import "google/protobuf/struct.proto";
 import "baboflow/v1/common.proto";
 option go_package = "baboflow/api/baboflow/v1;v1";
-message AuditLog { int64 id = 1; int64 userId = 2; string action = 3; string targetType = 4; string targetId = 5; google.protobuf.Struct detail = 6; string ip = 7; string createdAt = 8; } message AuditLogListRequest { PageRequest page = 1; string action = 2; int64 userId = 3; } message AuditLogListResponse { repeated AuditLog list = 1; PageResponse page = 2; }
+message AuditLog {
+  int64 id                      = 1;
+  int64 userId                  = 2;
+  string action                 = 3;
+  string targetType             = 4;
+  string targetId               = 5;
+  google.protobuf.Struct detail = 6;
+  string ip                     = 7;
+  string createdAt              = 8;
+}
+message AuditLogListRequest {
+  PageRequest page = 1;
+  string action    = 2;
+  int64 userId     = 3;
+}
+message AuditLogListResponse {
+  repeated AuditLog list = 1;
+  PageResponse page      = 2;
+}
 service AuditService {
   // Old: GET /api/v1/audit?action=&userId=&page=&pageSize=.
-  rpc List(AuditLogListRequest) returns (AuditLogListResponse) { option (google.api.http) = { get: "/api/v1/audit-logs" }; }
+  rpc List(AuditLogListRequest) returns (AuditLogListResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/audit-logs"
+    };
+  }
 }

@@ -3,20 +3,96 @@ package baboflow.v1;
 import "google/api/annotations.proto";
 import "google/protobuf/struct.proto";
 option go_package = "baboflow/api/baboflow/v1;v1";
-message Skill { int64 id = 1; string name = 2; string description = 3; string source = 4; string chainId = 5; google.protobuf.Struct frontmatter = 6; string content = 7; bool hasFiles = 8; string createdAt = 9; } message SkillListRequest { string source = 1; string keyword = 2; } message SkillListResponse { repeated Skill list = 1; } message SkillIdRequest { int64 id = 1; } message UploadSkillRequest { string content = 1; string source = 2; } message SkillFile { string path = 1; int64 size = 2; bool isDir = 3; } message SkillFileList { repeated SkillFile list = 1; } message ReadSkillFileRequest { int64 id = 1; string path = 2; } message ReadSkillFileResponse { string path = 1; string content = 2; } message GenerateSkillRequest { string chainId = 1; } message SkillOk { bool ok = 1; }
+message Skill {
+  int64 id                           = 1;
+  string name                        = 2;
+  string description                 = 3;
+  string source                      = 4;
+  string chainId                     = 5;
+  google.protobuf.Struct frontmatter = 6;
+  string content                     = 7;
+  bool hasFiles                      = 8;
+  string createdAt                   = 9;
+}
+message SkillListRequest {
+  string source  = 1;
+  string keyword = 2;
+}
+message SkillListResponse {
+  repeated Skill list = 1;
+}
+message SkillIdRequest {
+  int64 id = 1;
+}
+message UploadSkillRequest {
+  string content = 1;
+  string source  = 2;
+}
+message SkillFile {
+  string path = 1;
+  int64 size  = 2;
+  bool isDir  = 3;
+}
+message SkillFileList {
+  repeated SkillFile list = 1;
+}
+message ReadSkillFileRequest {
+  int64 id    = 1;
+  string path = 2;
+}
+message ReadSkillFileResponse {
+  string path    = 1;
+  string content = 2;
+}
+message GenerateSkillRequest {
+  string chainId = 1;
+}
+message SkillOk {
+  bool ok = 1;
+}
 service SkillService {
   // Old: GET /api/v1/skills?source=&keyword=.
-  rpc List(SkillListRequest) returns (SkillListResponse) { option (google.api.http) = { get: "/api/v1/skills" }; }
+  rpc List(SkillListRequest) returns (SkillListResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/skills"
+    };
+  }
   // Old: POST /api/v1/skills.
-  rpc Upload(UploadSkillRequest) returns (Skill) { option (google.api.http) = { post: "/api/v1/skills" body: "*" }; }
+  rpc Upload(UploadSkillRequest) returns (Skill) {
+    option (google.api.http) = {
+      post: "/api/v1/skills"
+      body: "*"
+    };
+  }
   // Old: GET /api/v1/skills/{id}.
-  rpc Get(SkillIdRequest) returns (Skill) { option (google.api.http) = { get: "/api/v1/skills/{id}" }; }
+  rpc Get(SkillIdRequest) returns (Skill) {
+    option (google.api.http) = {
+      get: "/api/v1/skills/{id}"
+    };
+  }
   // Old: DELETE /api/v1/skills/{id}.
-  rpc Delete(SkillIdRequest) returns (SkillOk) { option (google.api.http) = { delete: "/api/v1/skills/{id}" }; }
+  rpc Delete(SkillIdRequest) returns (SkillOk) {
+    option (google.api.http) = {
+      delete: "/api/v1/skills/{id}"
+    };
+  }
   // Old: GET /api/v1/skills/{id}/files.
-  rpc ListFiles(SkillIdRequest) returns (SkillFileList) { option (google.api.http) = { get: "/api/v1/skills/{id}/files" }; }
+  rpc ListFiles(SkillIdRequest) returns (SkillFileList) {
+    option (google.api.http) = {
+      get: "/api/v1/skills/{id}/files"
+    };
+  }
   // Old: GET /api/v1/skills/{id}/file?path=.
-  rpc ReadFile(ReadSkillFileRequest) returns (ReadSkillFileResponse) { option (google.api.http) = { get: "/api/v1/skills/{id}/file" }; }
+  rpc ReadFile(ReadSkillFileRequest) returns (ReadSkillFileResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/skills/{id}/file"
+    };
+  }
   // Old: POST /api/v1/chains/{id}/skill.
-  rpc Generate(GenerateSkillRequest) returns (Skill) { option (google.api.http) = { post: "/api/v1/rule-chains/{chainId}/skill" body: "*" }; }
+  rpc Generate(GenerateSkillRequest) returns (Skill) {
+    option (google.api.http) = {
+      post: "/api/v1/rule-chains/{chainId}/skill"
+      body: "*"
+    };
+  }
 }

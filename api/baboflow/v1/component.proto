@@ -4,13 +4,46 @@ import "google/api/annotations.proto";
 import "google/protobuf/struct.proto";
 import "baboflow/v1/common.proto";
 option go_package = "baboflow/api/baboflow/v1;v1";
-message ComponentMeta { string type = 1; string name = 2; string category = 3; string description = 4; google.protobuf.Struct configSchema = 5; google.protobuf.Struct example = 6; }
-message ComponentListRequest { string category = 1; string keyword = 2; } message ComponentListResponse { repeated ComponentMeta list = 1; } message ComponentSyncResult { int32 added = 1; int32 updated = 2; int32 removed = 3; int32 skipped = 4; string lastRunAt = 5; }
+message ComponentMeta {
+  string type                         = 1;
+  string name                         = 2;
+  string category                     = 3;
+  string description                  = 4;
+  google.protobuf.Struct configSchema = 5;
+  google.protobuf.Struct example      = 6;
+}
+message ComponentListRequest {
+  string category = 1;
+  string keyword  = 2;
+}
+message ComponentListResponse {
+  repeated ComponentMeta list = 1;
+}
+message ComponentSyncResult {
+  int32 added      = 1;
+  int32 updated    = 2;
+  int32 removed    = 3;
+  int32 skipped    = 4;
+  string lastRunAt = 5;
+}
 service ComponentService {
   // Old: GET /api/v1/components?category=&keyword=.
-  rpc List(ComponentListRequest) returns (ComponentListResponse) { option (google.api.http) = { get: "/api/v1/components" }; }
+  rpc List(ComponentListRequest) returns (ComponentListResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/components"
+    };
+  }
   // Old: GET /api/v1/components/sync.
-  rpc GetSyncStatus(Empty) returns (ComponentSyncResult) { option (google.api.http) = { get: "/api/v1/components/sync" }; }
+  rpc GetSyncStatus(Empty) returns (ComponentSyncResult) {
+    option (google.api.http) = {
+      get: "/api/v1/components/sync"
+    };
+  }
   // Old: POST /api/v1/components/sync.
-  rpc Sync(Empty) returns (ComponentSyncResult) { option (google.api.http) = { post: "/api/v1/components/sync" body: "*" }; }
+  rpc Sync(Empty) returns (ComponentSyncResult) {
+    option (google.api.http) = {
+      post: "/api/v1/components/sync"
+      body: "*"
+    };
+  }
 }

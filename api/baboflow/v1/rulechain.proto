@@ -4,40 +4,252 @@ import "google/api/annotations.proto";
 import "google/protobuf/struct.proto";
 import "baboflow/v1/common.proto";
 option go_package = "baboflow/api/baboflow/v1;v1";
-message RuleChain { string id = 1; string name = 2; string description = 3; google.protobuf.Struct inputSchema = 4; string status = 5; int32 version = 6; string source = 7; bool debugMode = 8; google.protobuf.Struct dsl = 9; string updatedAt = 10; string createdAt = 11; }
-message RuleChainListItem { string id = 1; string name = 2; string description = 3; string status = 4; int32 version = 5; string source = 6; bool debugMode = 7; string updatedAt = 8; } message RuleChainInput { string name = 1; string description = 2; google.protobuf.Struct inputSchema = 3; google.protobuf.Struct dsl = 4; bool debugMode = 5; string source = 6; }
-message RuleChainIdRequest { string id = 1; } message RuleChainUpdateRequest { string id = 1; string name = 2; string description = 3; google.protobuf.Struct inputSchema = 4; google.protobuf.Struct dsl = 5; bool debugMode = 6; string source = 7; } message RuleChainListRequest { PageRequest page = 1; string status = 2; string keyword = 3; } message RuleChainListResponse { repeated RuleChainListItem list = 1; PageResponse page = 2; } message ValidateRuleChainRequest { google.protobuf.Struct dsl = 1; } message ValidateRuleChainResponse { bool valid = 1; string error = 2; } message RuleChainVersion { int64 id = 1; string chainId = 2; int32 version = 3; google.protobuf.Struct dsl = 4; string publishedAt = 5; } message RuleChainVersionList { repeated RuleChainVersion list = 1; } message RollbackRuleChainRequest { string id = 1; int32 version = 2; } message PublishRuleChainResponse { int32 version = 1; } message RuleChainExport { string name = 1; string description = 2; google.protobuf.Struct inputSchema = 3; int32 version = 4; google.protobuf.Struct dsl = 5; } message RunRuleChainRequest { string id = 1; string dataType = 2; string data = 3; map<string,string> metadata = 4; } message ImmediateRunResult { int64 runId = 1; string status = 2; string output = 3; string error = 4; repeated NodeTrace nodeTrace = 5; } message RuleChainRun { int64 id = 1; string chainId = 2; string trigger = 3; google.protobuf.Struct input = 4; string status = 5; google.protobuf.Struct output = 6; string error = 7; string startedAt = 8; string finishedAt = 9; repeated NodeTrace nodeTrace = 10; optional int64 taskId = 11; } message NodeTrace { string nodeId = 1; string flowType = 2; string relationType = 3; string data = 4; string in = 5; string out = 6; TraceMessage input = 7; TraceMessage output = 8; int64 durationMs = 9; string err = 10; } message TraceMessage { string msg = 1; map<string,string> metadata = 2; string type = 3; string dataType = 4; } message RuleChainRunListRequest { PageRequest page = 1; string chainId = 2; string status = 3; } message RuleChainRunListResponse { repeated RuleChainRun list = 1; PageResponse page = 2; } message RuleChainRunIdRequest { int64 runId = 1; } message RuleChainOk { bool ok = 1; }
+message RuleChain {
+  string id                          = 1;
+  string name                        = 2;
+  string description                 = 3;
+  google.protobuf.Struct inputSchema = 4;
+  string status                      = 5;
+  int32 version                      = 6;
+  string source                      = 7;
+  bool debugMode                     = 8;
+  google.protobuf.Struct dsl         = 9;
+  string updatedAt                   = 10;
+  string createdAt                   = 11;
+}
+message RuleChainListItem {
+  string id          = 1;
+  string name        = 2;
+  string description = 3;
+  string status      = 4;
+  int32 version      = 5;
+  string source      = 6;
+  bool debugMode     = 7;
+  string updatedAt   = 8;
+}
+message RuleChainInput {
+  string name                        = 1;
+  string description                 = 2;
+  google.protobuf.Struct inputSchema = 3;
+  google.protobuf.Struct dsl         = 4;
+  bool debugMode                     = 5;
+  string source                      = 6;
+}
+message RuleChainIdRequest {
+  string id = 1;
+}
+message RuleChainUpdateRequest {
+  string id                          = 1;
+  string name                        = 2;
+  string description                 = 3;
+  google.protobuf.Struct inputSchema = 4;
+  google.protobuf.Struct dsl         = 5;
+  bool debugMode                     = 6;
+  string source                      = 7;
+}
+message RuleChainListRequest {
+  PageRequest page = 1;
+  string status    = 2;
+  string keyword   = 3;
+}
+message RuleChainListResponse {
+  repeated RuleChainListItem list = 1;
+  PageResponse page               = 2;
+}
+message ValidateRuleChainRequest {
+  google.protobuf.Struct dsl = 1;
+}
+message ValidateRuleChainResponse {
+  bool valid   = 1;
+  string error = 2;
+}
+message RuleChainVersion {
+  int64 id                   = 1;
+  string chainId             = 2;
+  int32 version              = 3;
+  google.protobuf.Struct dsl = 4;
+  string publishedAt         = 5;
+}
+message RuleChainVersionList {
+  repeated RuleChainVersion list = 1;
+}
+message RollbackRuleChainRequest {
+  string id     = 1;
+  int32 version = 2;
+}
+message PublishRuleChainResponse {
+  int32 version = 1;
+}
+message RuleChainExport {
+  string name                        = 1;
+  string description                 = 2;
+  google.protobuf.Struct inputSchema = 3;
+  int32 version                      = 4;
+  google.protobuf.Struct dsl         = 5;
+}
+message RunRuleChainRequest {
+  string id                    = 1;
+  string dataType              = 2;
+  string data                  = 3;
+  map<string, string> metadata = 4;
+}
+message ImmediateRunResult {
+  int64 runId                  = 1;
+  string status                = 2;
+  string output                = 3;
+  string error                 = 4;
+  repeated NodeTrace nodeTrace = 5;
+}
+message RuleChainRun {
+  int64 id                      = 1;
+  string chainId                = 2;
+  string trigger                = 3;
+  google.protobuf.Struct input  = 4;
+  string status                 = 5;
+  google.protobuf.Struct output = 6;
+  string error                  = 7;
+  string startedAt              = 8;
+  string finishedAt             = 9;
+  repeated NodeTrace nodeTrace  = 10;
+  optional int64 taskId         = 11;
+}
+message NodeTrace {
+  string nodeId       = 1;
+  string flowType     = 2;
+  string relationType = 3;
+  string data         = 4;
+  string in           = 5;
+  string out          = 6;
+  TraceMessage input  = 7;
+  TraceMessage output = 8;
+  int64 durationMs    = 9;
+  string err          = 10;
+}
+message TraceMessage {
+  string msg                   = 1;
+  map<string, string> metadata = 2;
+  string type                  = 3;
+  string dataType              = 4;
+}
+message RuleChainRunListRequest {
+  PageRequest page = 1;
+  string chainId   = 2;
+  string status    = 3;
+}
+message RuleChainRunListResponse {
+  repeated RuleChainRun list = 1;
+  PageResponse page          = 2;
+}
+message RuleChainRunIdRequest {
+  int64 runId = 1;
+}
+message RuleChainOk {
+  bool ok = 1;
+}
 service RuleChainService {
   // Old: GET /api/v1/chains?status=&keyword=&page=&pageSize=.
-  rpc List(RuleChainListRequest) returns (RuleChainListResponse) { option (google.api.http) = { get: "/api/v1/rule-chains" }; }
+  rpc List(RuleChainListRequest) returns (RuleChainListResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/rule-chains"
+    };
+  }
   // Old: POST /api/v1/chains.
-  rpc Create(RuleChainInput) returns (RuleChain) { option (google.api.http) = { post: "/api/v1/rule-chains" body: "*" }; }
+  rpc Create(RuleChainInput) returns (RuleChain) {
+    option (google.api.http) = {
+      post: "/api/v1/rule-chains"
+      body: "*"
+    };
+  }
   // Old: GET /api/v1/chains/{id}.
-  rpc Get(RuleChainIdRequest) returns (RuleChain) { option (google.api.http) = { get: "/api/v1/rule-chains/{id}" }; }
+  rpc Get(RuleChainIdRequest) returns (RuleChain) {
+    option (google.api.http) = {
+      get: "/api/v1/rule-chains/{id}"
+    };
+  }
   // Old: PUT /api/v1/chains/{id}.
-  rpc Update(RuleChainUpdateRequest) returns (RuleChainOk) { option (google.api.http) = { put: "/api/v1/rule-chains/{id}" body: "*" }; }
+  rpc Update(RuleChainUpdateRequest) returns (RuleChainOk) {
+    option (google.api.http) = {
+      put: "/api/v1/rule-chains/{id}"
+      body: "*"
+    };
+  }
   // Old: DELETE /api/v1/chains/{id}.
-  rpc Delete(RuleChainIdRequest) returns (RuleChainOk) { option (google.api.http) = { delete: "/api/v1/rule-chains/{id}" }; }
+  rpc Delete(RuleChainIdRequest) returns (RuleChainOk) {
+    option (google.api.http) = {
+      delete: "/api/v1/rule-chains/{id}"
+    };
+  }
   // Old: POST /api/v1/chains/validate.
-  rpc Validate(ValidateRuleChainRequest) returns (ValidateRuleChainResponse) { option (google.api.http) = { post: "/api/v1/rule-chains/validate" body: "*" }; }
+  rpc Validate(ValidateRuleChainRequest) returns (ValidateRuleChainResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/rule-chains/validate"
+      body: "*"
+    };
+  }
   // Old: POST /api/v1/chains/{id}/publish.
-  rpc Publish(RuleChainIdRequest) returns (PublishRuleChainResponse) { option (google.api.http) = { post: "/api/v1/rule-chains/{id}/publish" body: "*" }; }
+  rpc Publish(RuleChainIdRequest) returns (PublishRuleChainResponse) {
+    option (google.api.http) = {
+      post: "/api/v1/rule-chains/{id}/publish"
+      body: "*"
+    };
+  }
   // Old: POST /api/v1/chains/{id}/offline.
-  rpc Offline(RuleChainIdRequest) returns (RuleChainOk) { option (google.api.http) = { post: "/api/v1/rule-chains/{id}/offline" body: "*" }; }
+  rpc Offline(RuleChainIdRequest) returns (RuleChainOk) {
+    option (google.api.http) = {
+      post: "/api/v1/rule-chains/{id}/offline"
+      body: "*"
+    };
+  }
   // Old: GET /api/v1/chains/{id}/versions.
-  rpc ListVersions(RuleChainIdRequest) returns (RuleChainVersionList) { option (google.api.http) = { get: "/api/v1/rule-chains/{id}/versions" }; }
+  rpc ListVersions(RuleChainIdRequest) returns (RuleChainVersionList) {
+    option (google.api.http) = {
+      get: "/api/v1/rule-chains/{id}/versions"
+    };
+  }
   // Old: POST /api/v1/chains/{id}/rollback.
-  rpc Rollback(RollbackRuleChainRequest) returns (RuleChainOk) { option (google.api.http) = { post: "/api/v1/rule-chains/{id}/rollback" body: "*" }; }
+  rpc Rollback(RollbackRuleChainRequest) returns (RuleChainOk) {
+    option (google.api.http) = {
+      post: "/api/v1/rule-chains/{id}/rollback"
+      body: "*"
+    };
+  }
   // Old: GET /api/v1/chains/{id}/export.
-  rpc Export(RuleChainIdRequest) returns (RuleChainExport) { option (google.api.http) = { get: "/api/v1/rule-chains/{id}/export" }; }
+  rpc Export(RuleChainIdRequest) returns (RuleChainExport) {
+    option (google.api.http) = {
+      get: "/api/v1/rule-chains/{id}/export"
+    };
+  }
   // Old: POST /api/v1/chains/import.
-  rpc Import(RuleChainExport) returns (RuleChain) { option (google.api.http) = { post: "/api/v1/rule-chains/import" body: "*" }; }
+  rpc Import(RuleChainExport) returns (RuleChain) {
+    option (google.api.http) = {
+      post: "/api/v1/rule-chains/import"
+      body: "*"
+    };
+  }
   // Old: POST /api/v1/chains/{id}/run.
-  rpc Run(RunRuleChainRequest) returns (ImmediateRunResult) { option (google.api.http) = { post: "/api/v1/rule-chains/{id}/run" body: "*" }; }
+  rpc Run(RunRuleChainRequest) returns (ImmediateRunResult) {
+    option (google.api.http) = {
+      post: "/api/v1/rule-chains/{id}/run"
+      body: "*"
+    };
+  }
   // Old: POST /api/v1/chains/{id}/debug.
-  rpc Debug(RunRuleChainRequest) returns (ImmediateRunResult) { option (google.api.http) = { post: "/api/v1/rule-chains/{id}/debug" body: "*" }; }
+  rpc Debug(RunRuleChainRequest) returns (ImmediateRunResult) {
+    option (google.api.http) = {
+      post: "/api/v1/rule-chains/{id}/debug"
+      body: "*"
+    };
+  }
   // Old: GET /api/v1/chains/runs?chainId=&status=&page=&pageSize=.
-  rpc ListRuns(RuleChainRunListRequest) returns (RuleChainRunListResponse) { option (google.api.http) = { get: "/api/v1/rule-chain-runs" }; }
+  rpc ListRuns(RuleChainRunListRequest) returns (RuleChainRunListResponse) {
+    option (google.api.http) = {
+      get: "/api/v1/rule-chain-runs"
+    };
+  }
   // Old: GET /api/v1/chains/runs/{runId}.
-  rpc GetRun(RuleChainRunIdRequest) returns (RuleChainRun) { option (google.api.http) = { get: "/api/v1/rule-chain-runs/{runId}" }; }
+  rpc GetRun(RuleChainRunIdRequest) returns (RuleChainRun) {
+    option (google.api.http) = {
+      get: "/api/v1/rule-chain-runs/{runId}"
+    };
+  }
 }

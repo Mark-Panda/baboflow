@@ -5,13 +5,13 @@ package baboflow.v1;
 option go_package = "baboflow/api/baboflow/v1;v1";
 
 message PageRequest {
-  int32 page = 1;
+  int32 page      = 1;
   int32 page_size = 2;
 }
 
 message PageResponse {
-  int64 total = 1;
-  int32 page = 2;
+  int64 total     = 1;
+  int32 page      = 2;
   int32 page_size = 3;
 }
 
